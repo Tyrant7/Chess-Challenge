@@ -2,12 +2,12 @@
 using Microsoft.Win32.SafeHandles;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 
 // TODO: MOST IMPORTANT: Null move pruning
 // TODO: King safety
 // TODO: Check extensions
-// TODO: Can probably optimize MVV_LVA with a simple mathematical function
 
 public class MyBot : IChessBot
 {
@@ -16,25 +16,13 @@ public class MyBot : IChessBot
     // None, Pawn, Knight, Bishop, Rook, Queen, King 
     private readonly int[] PieceValues = { 0, 100, 320, 320, 500, 900, 0 };
 
-    // MVV_LVA [victim - 1, attacker - 1]
-    private readonly int[,] MVV_LVA =
-    {
-        // When accessing, since none is not an opiton, use victim - 1 and attacker - 1 since pawns are indexed at 0
-        // Also exclude kings from being the victim because they cannot be captured
-        { 15, 14, 13, 12, 11, 10 }, // victim P, attacker P, N, B, R, Q, K
-        { 25, 24, 23, 22, 21, 20 }, // victim N, attacker P, N, B, R, Q, K
-        { 35, 34, 33, 32, 31, 30 }, // victim B, attacker P, N, B, R, Q, K
-        { 45, 44, 43, 42, 41, 40 }, // victim R, attacker P, N, B, R, Q, K
-        { 55, 54, 53, 52, 51, 50 }, // victim Q, attacker P, N, B, R, Q, K
-    };
-
     private int searchMaxTime;
     private Timer searchTimer;
     private bool OutOfTime => searchTimer.MillisecondsElapsedThisTurn > searchMaxTime;
 
     public Move Think(Board board, Timer timer)
     {
-        Move[] moves = OrderMoves(board, board.GetLegalMoves());
+        Move[] moves = OrderMoves(board.GetLegalMoves());
 
         // One less than the minimum evaluation so that there will never be no move chosen even if there are no legal moves
         int bestScore = -10000000;
@@ -64,17 +52,38 @@ public class MyBot : IChessBot
             }
     }
 
-    private Move[] OrderMoves(Board board, Move[] moves)
-        => moves.OrderByDescending(move => ScoreMove(move)).ToArray();
+    // Generates the comment inside, but with 25 fewer tokens
+    private int GetMVV_LVA(PieceType victim, PieceType attacker)
+    {
+        /*
+        // Access with MVV_LVA [victim - 1, attacker - 1]
+        private readonly int[,] MVV_LVA =
+        {
+            // Exclude None and Kings from being the victim because they cannot be captured
+            { 15, 14, 13, 12, 11, 10 }, // victim P, attacker P, N, B, R, Q, K
+            { 25, 24, 23, 22, 21, 20 }, // victim N, attacker P, N, B, R, Q, K
+            { 35, 34, 33, 32, 31, 30 }, // victim B, attacker P, N, B, R, Q, K
+            { 45, 44, 43, 42, 41, 40 }, // victim R, attacker P, N, B, R, Q, K
+            { 55, 54, 53, 52, 51, 50 }, // victim Q, attacker P, N, B, R, Q, K
+        };
+        */
 
-    private int ScoreMove(Move move)
-        => move.CapturePieceType != PieceType.None ? MVV_LVA[(int)move.CapturePieceType - 1, (int)move.MovePieceType - 1] : 0;
+        switch (victim)
+        {
+            case PieceType.None:
+            case PieceType.King:
+                return 0;
+            default:
+                return 10 * (int)victim + (5 - (int)attacker);
+        }
+    }
+
+    private Move[] OrderMoves(Move[] moves)
+        // Little scoring algorithm using MVVLVA
+        => moves.OrderByDescending(move => GetMVV_LVA(move.CapturePieceType, move.MovePieceType)).ToArray();
 
     private int Negamax(Board board, int depth, int alpha, int beta, int colour)
     {
-        if (OutOfTime)
-            return 0;
-
         int originalAlpha = alpha;
 
         // Transposition table lookup
@@ -113,7 +122,7 @@ public class MyBot : IChessBot
             return QuiescenceSearch(board, 2, alpha, beta, colour);
 
         // Search at a deeper depth
-        Move[] moves = OrderMoves(board, board.GetLegalMoves());
+        Move[] moves = OrderMoves(board.GetLegalMoves());
         int eval = -9999999;
         foreach (Move move in moves)
         {
@@ -148,18 +157,15 @@ public class MyBot : IChessBot
     // https://stackoverflow.com/questions/48846642/is-there-something-wrong-with-my-quiescence-search
     private int QuiescenceSearch(Board board, int depth, int alpha, int beta, int colour)
     {
-        if (OutOfTime)
-            return 0;
-
         // Determine if quiescence search should be continued
-        int bestValue = colour * (EvaluateMaterial(board) + EvaluateSquares(board));
+        int bestValue = colour * Evaluate(board);
 
         alpha = Math.Max(alpha, bestValue);
         if (alpha >= beta)
             return bestValue;
 
         // If in check, look into all moves, otherwise just captures
-        foreach (Move move in OrderMoves(board, board.GetLegalMoves(!board.IsInCheck())))
+        foreach (Move move in OrderMoves(board.GetLegalMoves(!board.IsInCheck())))
         {
             board.MakeMove(move);
             int eval = -QuiescenceSearch(board, depth - 1, -beta, -alpha, -colour);
@@ -176,21 +182,11 @@ public class MyBot : IChessBot
         return bestValue;
     }
 
-    // => instead of return { }
-    // because it saves one token
-    private int EvaluateMaterial(Board board)
-        => board.GetAllPieceLists()
-            .Sum(list => PieceValues[(int)list.TypeOfPieceInList] * list.Count * (list.IsWhitePieceList ? 1 : -1));
+    //
+    // Evaluation
+    //
 
-    private int EvaluateSquares(Board board)
-        => board.GetAllPieceLists()
-            .SelectMany(list => list)
-            .Sum(piece => (piece.IsWhite ? 1 : -1) * PieceSquareTable.GetSquareBonus(piece.Square, piece.PieceType, piece.IsWhite));
-}
-
-public static class PieceSquareTable
-{
-    private static int[] DistFromCentre =
+    private readonly static int[] DistFromCentre =
     {
         3, 3, 3, 3, 3, 3, 3, 3,
         3, 2, 2, 2, 2, 2, 2, 3,
@@ -216,7 +212,7 @@ public static class PieceSquareTable
     public static int GetSquareBonus(Square square, PieceType type, bool isWhite)
     {
         int rank = isWhite ? square.Rank : 7 - square.Rank;
-        int centreDist = DistFromCentre[square.Index] - (type == PieceType.Pawn ? 0 : 1);
+        int centreDist = DistFromCentre[square.Index];
 
         switch (type)
         {
@@ -227,22 +223,35 @@ public static class PieceSquareTable
                 return rank * 5 + (centreDist == 1 ? 10 : 0) + (centreDist == 0 ? 15 : 0);
             case PieceType.Knight:
                 // Get a bonus for being in the centre, and a penalty for being further away
-                return -centreDist * 15;
+                return -(centreDist - 1) * 15;
             case PieceType.Bishop:
                 // Same here, but less
-                return -centreDist * 10;
+                return -(centreDist - 1) * 10;
             case PieceType.Rook:
                 // Bonus for sitting on second or seventh rank, depending on side
                 return (square.Rank == (isWhite ? 6 : 1)) ? 10 : 0;
             case PieceType.Queen:
                 // Bonus for being in centre, just like knights, but less
-                return -centreDist * 5;
+                return -(centreDist - 1) * 5;
             case PieceType.King:
                 // King gets a base +10 bonus for being on back rank, then -10 for every step forward
                 return (-rank * 10) + 10;
         }
         return 0;
     }
+
+    // => instead of return { }
+    // because it saves one token
+    private int Evaluate(Board board)
+
+        // Material evaluation
+        => board.GetAllPieceLists()
+            .Sum(list => PieceValues[(int)list.TypeOfPieceInList] * list.Count * (list.IsWhitePieceList ? 1 : -1))
+
+        // Placement evaluation
+        +  board.GetAllPieceLists()
+            .SelectMany(list => list)
+            .Sum(piece => (piece.IsWhite ? 1 : -1) * GetSquareBonus(piece.Square, piece.PieceType, piece.IsWhite));
 }
 
 //
@@ -251,8 +260,8 @@ public static class PieceSquareTable
 
 public class TranspositionTable
 {
-    Dictionary<ulong, PositionInfo> table = new();
-    Queue<ulong> addedPositions = new();
+    private readonly Dictionary<ulong, PositionInfo> table = new();
+    private readonly Queue<ulong> addedPositions = new();
 
     public void Add(ulong zobristKey, PositionInfo parameters)
     {
@@ -277,6 +286,6 @@ public enum Flag
 
 public record struct PositionInfo(int score, int depthChecked, Flag flag)
 {
-    public bool IsValid => depthChecked > 0;
-    public static PositionInfo Invalid => new PositionInfo(int.MinValue, -1, Flag.Exact);
+    public readonly bool IsValid => depthChecked > 0;
+    public static PositionInfo Invalid => new(int.MinValue, -1, Flag.Exact);
 }
