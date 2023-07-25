@@ -17,15 +17,16 @@ public class MyBot : IChessBot
     // None, Pawn, Knight, Bishop, Rook, Queen, King 
     private readonly int[] PieceValues = { 0, 100, 320, 320, 500, 900, 0 };
 
-    // MVV_LVA [victim - 1, attacker]
+    // MVV_LVA [victim - 1, attacker - 1]
     private readonly int[,] MVV_LVA =
     {
-        // When accessing, since none is not an opiton, use victim - 1 as pawns are indexed at 0, also exclude kings
-        { 0, 15, 14, 13, 12, 11, 10 }, // victim P, attacker None, P, N, B, R, Q, K
-        { 0, 25, 24, 23, 22, 21, 20 }, // victim N, attacker None, P, N, B, R, Q, K
-        { 0, 35, 34, 33, 32, 31, 30 }, // victim B, attacker None, P, N, B, R, Q, K
-        { 0, 45, 44, 43, 42, 41, 40 }, // victim R, attacker None, P, N, B, R, Q, K
-        { 0, 55, 54, 53, 52, 51, 50 }, // victim Q, attacker None, P, N, B, R, Q, K
+        // When accessing, since none is not an opiton, use victim - 1 and attacker - 1 since pawns are indexed at 0
+        // Also exclude kings from being the victim because they cannot be captured
+        { 15, 14, 13, 12, 11, 10 }, // victim P, attacker P, N, B, R, Q, K
+        { 25, 24, 23, 22, 21, 20 }, // victim N, attacker P, N, B, R, Q, K
+        { 35, 34, 33, 32, 31, 30 }, // victim B, attacker P, N, B, R, Q, K
+        { 45, 44, 43, 42, 41, 40 }, // victim R, attacker P, N, B, R, Q, K
+        { 55, 54, 53, 52, 51, 50 }, // victim Q, attacker P, N, B, R, Q, K
     };
 
     private int searchMaxTime;
@@ -68,7 +69,7 @@ public class MyBot : IChessBot
         => moves.OrderByDescending(move => ScoreMove(board, move)).ToArray();
 
     private int ScoreMove(Board board, Move move)
-        => move.CapturePieceType != PieceType.None ? MVV_LVA[(int)move.CapturePieceType - 1, (int)move.MovePieceType] : 0;
+        => move.CapturePieceType != PieceType.None ? MVV_LVA[(int)move.CapturePieceType - 1, (int)move.MovePieceType - 1] : 0;
 
     private int Negamax(Board board, int depth, int alpha, int beta, int colour)
     {
