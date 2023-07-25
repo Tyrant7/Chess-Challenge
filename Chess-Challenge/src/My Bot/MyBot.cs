@@ -1,11 +1,10 @@
 ﻿using ChessChallenge.API;
+using Microsoft.Win32.SafeHandles;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 
-// TODO: MOST IMPORTANT: Killer moves
 // TODO: MOST IMPORTANT: Null move pruning
-// TODO: MOST IMPORTANT: Quiescence search
 // TODO: King safety
 // TODO: Check extensions
 // TODO: Can probably optimize MVV_LVA with a simple mathematical function
@@ -66,9 +65,9 @@ public class MyBot : IChessBot
     }
 
     private Move[] OrderMoves(Board board, Move[] moves)
-        => moves.OrderByDescending(move => ScoreMove(board, move)).ToArray();
+        => moves.OrderByDescending(move => ScoreMove(move)).ToArray();
 
-    private int ScoreMove(Board board, Move move)
+    private int ScoreMove(Move move)
         => move.CapturePieceType != PieceType.None ? MVV_LVA[(int)move.CapturePieceType - 1, (int)move.MovePieceType - 1] : 0;
 
     private int Negamax(Board board, int depth, int alpha, int beta, int colour)
@@ -109,8 +108,9 @@ public class MyBot : IChessBot
 
         // Terminal node, calculate score
         if (depth <= 0)
-            // Score from white's perspective, times -1 for black
-            return colour * (EvaluateMaterial(board) + EvaluateSquares(board));
+            // Do a Quiescence Search with a depth of 3, which will return a score from white's perspective
+            // Multiple that score by -1 for black
+            return QuiescenceSearch(board, 2, alpha, beta, colour);
 
         // Search at a deeper depth
         Move[] moves = OrderMoves(board, board.GetLegalMoves());
@@ -142,6 +142,38 @@ public class MyBot : IChessBot
         transpositionTable.Add(board.ZobristKey, positionInfo);
 
         return eval;
+    }
+
+    // Quiescence search with help from
+    // https://stackoverflow.com/questions/48846642/is-there-something-wrong-with-my-quiescence-search
+    private int QuiescenceSearch(Board board, int depth, int alpha, int beta, int colour)
+    {
+        if (OutOfTime)
+            return 0;
+
+        // Determine if quiescence search should be continued
+        int bestValue = colour * (EvaluateMaterial(board) + EvaluateSquares(board));
+
+        alpha = Math.Max(alpha, bestValue);
+        if (alpha >= beta)
+            return bestValue;
+
+        // If in check, look into all moves, otherwise just captures
+        foreach (Move move in OrderMoves(board, board.GetLegalMoves(!board.IsInCheck())))
+        {
+            board.MakeMove(move);
+            int eval = -QuiescenceSearch(board, depth - 1, -beta, -alpha, -colour);
+            board.UndoMove(move);
+
+            if (OutOfTime)
+                return 0;
+
+            bestValue = Math.Max(bestValue, eval);
+            alpha = Math.Max(alpha, bestValue);
+            if (alpha >= beta)
+                break;
+        }
+        return bestValue;
     }
 
     // => instead of return { }
