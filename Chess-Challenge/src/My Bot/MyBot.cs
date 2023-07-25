@@ -2,14 +2,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using static System.Formats.Asn1.AsnWriter;
 
-// TODO: MOST IMPORTANT: Killer moves
 // TODO: MOST IMPORTANT: Null move pruning
 // TODO: MOST IMPORTANT: Quiescence search
 // TODO: King safety
 // TODO: Check extensions
 // TODO: Can probably optimize MVV_LVA with a simple mathematical function
+// TODO: Reimplement killer moves with more efficiency
 
 public class MyBot : IChessBot
 {
@@ -178,7 +177,7 @@ public class MyBot : IChessBot
         {
             // 2: Hardcoded max number of killer moves
             // Shift all moves one index upwards
-            for (int i = 0; i < 2; i++)
+            for (int i = 1; i < 2; i++)
             {
                 Move previous = killerMoves[i - 1, searchPly];
                 killerMoves[i, searchPly] = previous;
