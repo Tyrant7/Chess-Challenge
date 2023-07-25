@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using static System.Formats.Asn1.AsnWriter;
 
 // TODO: MOST IMPORTANT: Killer moves
 // TODO: MOST IMPORTANT: Null move pruning
@@ -13,6 +14,10 @@ using System.Linq;
 public class MyBot : IChessBot
 {
     TranspositionTable transpositionTable = new();
+
+    // 2 is the number of killer moves
+    // 12 as a placeholder max ply value
+    Move[,] killerMoves = new Move[2, 12];
 
     // None, Pawn, Knight, Bishop, Rook, Queen, King 
     private readonly int[] PieceValues = { 0, 100, 320, 320, 500, 900, 0 };
@@ -29,12 +34,15 @@ public class MyBot : IChessBot
         { 55, 54, 53, 52, 51, 50 }, // victim Q, attacker P, N, B, R, Q, K
     };
 
+    private int initialSearchPly;
+
     private int searchMaxTime;
     private Timer searchTimer;
     private bool OutOfTime => searchTimer.MillisecondsElapsedThisTurn > searchMaxTime;
 
     public Move Think(Board board, Timer timer)
     {
+        initialSearchPly = board.PlyCount;
         Move[] moves = OrderMoves(board, board.GetLegalMoves());
 
         // One less than the minimum evaluation so that there will never be no move chosen even if there are no legal moves
@@ -69,7 +77,20 @@ public class MyBot : IChessBot
         => moves.OrderByDescending(move => ScoreMove(board, move)).ToArray();
 
     private int ScoreMove(Board board, Move move)
-        => move.CapturePieceType != PieceType.None ? MVV_LVA[(int)move.CapturePieceType - 1, (int)move.MovePieceType - 1] : 0;
+    {
+        if (move.CapturePieceType != PieceType.None)
+            // MVV_LVA_Offset = int.MaxValue - 256
+            // Or 2147483391
+            return 2147483391 + MVV_LVA[(int)move.CapturePieceType - 1, (int)move.MovePieceType - 1];
+        else
+            for (int n = 0; n < 2; n++)
+                if (move == killerMoves[n, board.PlyCount - initialSearchPly])
+                    // If killer move matches at spot 0, we'll end up with
+                    // MVV_LVA_Offset - 10, the second would be MVV_LVA_Offset - 20
+                    // This will always place killer moves just below captures
+                    return 2147483391 - ((n + 1) * 10);
+        return 0;
+    }
 
     private int Negamax(Board board, int depth, int alpha, int beta, int colour)
     {
@@ -128,7 +149,11 @@ public class MyBot : IChessBot
             // as this move won't be benificial assuming the opponent plays the best move
             alpha = Math.Max(alpha, eval);
             if (alpha >= beta)
+            {
+                if (move.CapturePieceType == PieceType.None)
+                    StoreKillerMove(move, board.PlyCount - initialSearchPly);
                 break;
+            }
         }
 
         // Transposition table storage
@@ -142,6 +167,26 @@ public class MyBot : IChessBot
         transpositionTable.Add(board.ZobristKey, positionInfo);
 
         return eval;
+    }
+
+    private void StoreKillerMove(Move move, int searchPly)
+    {
+        Move firstKiller = killerMoves[0, searchPly];
+
+        // Don't store the same killer moves
+        if (firstKiller != move)
+        {
+            // 2: Hardcoded max number of killer moves
+            // Shift all moves one index upwards
+            for (int i = 0; i < 2; i++)
+            {
+                Move previous = killerMoves[i - 1, searchPly];
+                killerMoves[i, searchPly] = previous;
+            }
+
+            // Add the new killer move in the first spot
+            killerMoves[0, searchPly] = move;
+        }
     }
 
     // => instead of return { }
