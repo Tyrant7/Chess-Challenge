@@ -110,30 +110,29 @@ namespace Chess_Challenge.src.My_Bot
         // Use to print the packed array to the console, then clean up and paste directly into your code.
         public PieceTableGenerator()
         {
-            // Add boards from "index" 0 upwards. Here, the pawn board is "index" 0.
-            // That means it will occupy the least significant byte in the packed data.
-            List<sbyte[,]> allScores = new List<sbyte[,]>
-            {
-                pawnScores,
-                knightScores,
-                bishopScores,
-                rookScores,
-                queenScores,
-                kingMiddlegameScores,
-                kingEndgameScores,
-                kingHuntScores
-            };
+            //Add boards from "index" 0 upwards. Here, the pawn board is "index" 0.
+            //That means it will occupy the least significant byte in the packed data.
+            List<sbyte[,]> allScores = new();
+            allScores.Add(pawnScores);
+            allScores.Add(knightScores);
+            allScores.Add(bishopScores);
+            allScores.Add(rookScores);
+            allScores.Add(queenScores);
+            allScores.Add(kingMiddlegameScores);
+            allScores.Add(kingEndgameScores);
+            allScores.Add(kingHuntScores);
 
-            long[,] packedData = new long[8, 4];
-
+            ulong[,] packedData = new ulong[8, 4];
             for (int rank = 0; rank < 8; rank++)
             {
                 for (int file = 0; file < 4; file++)
                 {
                     for (int set = 0; set < 8; set++)
                     {
+                        //This is slightly inefficient but you only need to run this code once so it's fine
                         sbyte[,] thisSet = allScores[set];
-                        packedData[rank, file] |= ((long)thisSet[rank, file]) << (8 * set);
+                        //You could argue this should be |= but either operator works since no two digits overlap.
+                        packedData[rank, file] += ((ulong)thisSet[rank, file]) << (8 * set);
                     }
                 }
                 Console.WriteLine("{{0x{0,16:X}, 0x{1,16:X}, 0x{2,16:X}, 0x{3,16:X}}},", packedData[rank, 0], packedData[rank, 1], packedData[rank, 2], packedData[rank, 3]);

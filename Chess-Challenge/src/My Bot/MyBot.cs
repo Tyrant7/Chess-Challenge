@@ -230,58 +230,37 @@ public class MyBot : IChessBot
     // Evaluation
     //
 
-    private readonly static int[] DistFromCentre =
-    {
-        3, 3, 3, 3, 3, 3, 3, 3,
-        3, 2, 2, 2, 2, 2, 2, 3,
-        3, 2, 1, 1, 1, 1, 2, 3,
-        3, 2, 1, 0, 0, 1, 2, 3,
-        3, 2, 1, 0, 0, 1, 2, 3,
-        3, 2, 1, 1, 1, 1, 2, 3,
-        3, 2, 2, 2, 2, 2, 2, 3,
-        3, 3, 3, 3, 3, 3, 3, 3
+    // Big table packed with data from premade piece square tables
+    private readonly ulong[,] PackedEvaluationTables = {
+        {0x31CDE1EBFFEBCE00, 0x31D7D7F5FFF5D800, 0x31E1D7F5FFF5E200, 0x31EBCDFAFFF5E200},
+        {0x31E1E1F604F5D80A, 0x13EBD80009FFEC0A, 0x13F5D8000A000014, 0x13FFCE000A00001E},
+        {0x31E1E1F5FAF5E232, 0x13F5D80000000032, 0x0013D80500050A32, 0x001DCE05000A0F32},
+        {0x31E1E1FAFAF5E205, 0x13F5D80000050505, 0x001DD80500050F0A, 0xEC27CE05000A1419},
+        {0x31E1EBFFFAF5E200, 0x13F5E20000000000, 0x001DE205000A0F00, 0xEC27D805000A1414},
+        {0x31E1F5F5FAF5E205, 0x13F5EC05000A04FB, 0x0013EC05000A09F6, 0x001DEC05000A0F00},
+        {0x31E213F5FAF5D805, 0x13E214000004EC0A, 0x140000050000000A, 0x14000000000004EC},
+        {0x31CE13EBFFEBCE00, 0x31E21DF5FFF5D800, 0x31E209F5FFF5E200, 0x31E1FFFB04F5E200}
     };
 
-    // NOT CURRENTLY WORTH IT TO HAVE
-    // Generates an array identical to the one above, but in 1 fewer token
-    // Courtesy of ChatGPT for this code. I have very little idea on how it works
-    /*
-    private static int[] DistFromCentre = new int[64]
-        .Select((_, i) =>
-            Math.Max(Math.Max(Math.Abs(i % 8 - 3), Math.Abs(i / 8 - 3)),
-            Math.Max(Math.Abs(i % 8 - 4), Math.Abs(i / 8 - 4))) - 1
-        ).ToArray();
-    */
-
-    public static int GetSquareBonus(Square square, PieceType type, bool isWhite)
+    public int GetSquareBonus(PieceType type, bool isWhite, int file, int rank)
     {
-        int rank = isWhite ? square.Rank : 7 - square.Rank;
-        int centreDist = DistFromCentre[square.Index];
+        // Because arrays are only 4 squares wide, mirror across files
+        if (file > 3)
+            file = 7 - file;
 
-        switch (type)
-        {
-            // Use some simple equations to determine generally good squares without using a table
-            case PieceType.Pawn:
-                // Pawn gets bonuses for being further forward
-                // but also get a bonus for being close to the centre
-                return rank * 5 + (centreDist == 1 ? 10 : 0) + (centreDist == 0 ? 15 : 0);
-            case PieceType.Knight:
-                // Get a bonus for being in the centre, and a penalty for being further away
-                return -(centreDist - 1) * 15;
-            case PieceType.Bishop:
-                // Same here, but less
-                return -(centreDist - 1) * 10;
-            case PieceType.Rook:
-                // Bonus for sitting on second or seventh rank, depending on side
-                return (square.Rank == (isWhite ? 6 : 1)) ? 10 : 0;
-            case PieceType.Queen:
-                // Bonus for being in centre, just like knights, but less
-                return -(centreDist - 1) * 5;
-            case PieceType.King:
-                // King gets a base +10 bonus for being on back rank, then -10 for every step forward
-                return (-rank * 10) + 10;
-        }
-        return 0;
+        // Mirror vertically for white pieces, since piece arrays are flipped vertically
+        if (isWhite)
+            rank = 7 - rank;
+
+        ulong bytemask = 0xFF;
+
+        // First shift the mask to select the correct byte
+        // Then bitwise-and it with the packed scores
+        // Finally, un-shift the resulting data to properly convert back
+        int unpackedData = (sbyte)((PackedEvaluationTables[rank, file] & (bytemask << (int)type)) >> (int)type);
+
+        // Invert eval scores for black pieces
+        return isWhite ? unpackedData : -unpackedData;
     }
 
     // => instead of return { }
@@ -298,7 +277,8 @@ public class MyBot : IChessBot
             // Placement evaluation
             foreach (Piece piece in list)
             {
-                score += GetSquareBonus(piece.Square, piece.PieceType, piece.IsWhite) * multiplier;
+                // Leave out multiplier since it's worked in already in the GetSquareBonus method
+                score += GetSquareBonus(piece.PieceType, piece.IsWhite, piece.Square.File, piece.Square.Rank);
             }
         }
         return currentBoard.IsWhiteToMove ? score : -score;
