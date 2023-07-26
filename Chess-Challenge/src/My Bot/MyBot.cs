@@ -1,4 +1,5 @@
-﻿using ChessChallenge.API;
+﻿using Chess_Challenge.src.My_Bot;
+using ChessChallenge.API;
 using System;
 using System.Linq;
 
@@ -28,8 +29,8 @@ public class MyBot : IChessBot
         // Cache the board to save precious tokens
         currentBoard = board;
 
-        // One fifteenth of our remaining time, split among all of the moves
-        searchMaxTime = timer.MillisecondsRemaining / 15;
+        // 1/16th of our remaining time, split among all of the moves
+        searchMaxTime = timer.MillisecondsRemaining / 16;
         searchTimer = timer;
 
         // Progressively increase search depth, starting from 2
@@ -48,7 +49,8 @@ public class MyBot : IChessBot
     {
         // Evaluate the gamestate
         if (currentBoard.IsDraw())
-            return 0;
+            // Discourage draws slightly, unless losing
+            return -15;
         if (currentBoard.IsInCheckmate())
             // Checkmate = 99999
             // SwiftCheckmateBonus = 5000
@@ -126,6 +128,7 @@ public class MyBot : IChessBot
 
             if (eval > bestEval)
             {
+                // Beta cutoff
                 if (eval >= beta)
                 {
                     TTInsert(move, eval, depth, -1);
@@ -153,7 +156,8 @@ public class MyBot : IChessBot
     {
         // Evaluate the gamestate
         if (currentBoard.IsDraw())
-            return 0;
+            // Discourage draws slightly, unless losing
+            return -15;
         if (currentBoard.IsInCheckmate())
             // Checkmate = 99999
             // SwiftCheckmateBonus = 5000
