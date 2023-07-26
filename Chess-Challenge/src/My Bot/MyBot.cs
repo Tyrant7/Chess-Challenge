@@ -1,13 +1,15 @@
-﻿using Chess_Challenge.src.My_Bot;
-using ChessChallenge.API;
+﻿using ChessChallenge.API;
 using System;
 using System.Linq;
 
+// TODO: MOST IMPORTANT: Fix full piece square tables acting strange (probably a packing issue?)
+// TODO: Fine tune quiescence search depth for maximum improvements
+// TODO: History heuristic
+// TODO: Late move reductions
 // TODO: Passed pawn evaluation
-// TODO: Full piece square tables
 // TODO: Null move pruning
 // TODO: King safety
-// TODO: Check extensions
+// TODO: Check and promotion extensions
 
 public class MyBot : IChessBot
 {
@@ -19,11 +21,6 @@ public class MyBot : IChessBot
     private bool OutOfTime => searchTimer.MillisecondsElapsedThisTurn > searchMaxTime;
 
     Board currentBoard;
-
-    public MyBot()
-    {
-        new PieceTableGenerator();
-    }
 
     //
     // Search
@@ -41,7 +38,7 @@ public class MyBot : IChessBot
         // Progressively increase search depth, starting from 2
         for (int depth = 2; ; depth++)
         {
-            Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms");
+            // Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms");
 
             PVS(depth, -9999999, 9999999);
 
