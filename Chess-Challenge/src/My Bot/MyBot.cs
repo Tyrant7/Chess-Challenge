@@ -45,8 +45,10 @@ public class MyBot : IChessBot
 
             PVS(depth, -9999999, 9999999);
 
-            if (OutOfTime)
-                return TTRetrieve().BestMove;
+            // Must have come up with a move to return, otherwise keep going until one is found
+            Move bestMove = TTRetrieve().BestMove;
+            if (OutOfTime && bestMove != Move.NullMove)
+                return bestMove;
         }
     }
 
@@ -71,7 +73,7 @@ public class MyBot : IChessBot
         TTEntry entry = TTRetrieve();
 
         // No entry for this position
-        if (entry.Hash != currentBoard.ZobristKey)
+        if (entry.Hash != currentBoard.ZobristKey || entry == TTEntry.Invalid)
         {
             // Internal iterative deepening
             PVS(depth - 2, alpha, beta);
