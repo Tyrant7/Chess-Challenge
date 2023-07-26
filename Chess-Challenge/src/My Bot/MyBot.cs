@@ -20,6 +20,11 @@ public class MyBot : IChessBot
 
     Board currentBoard;
 
+    public MyBot()
+    {
+        new PieceTableGenerator();
+    }
+
     //
     // Search
     //
@@ -232,14 +237,14 @@ public class MyBot : IChessBot
 
     // Big table packed with data from premade piece square tables
     private readonly ulong[,] PackedEvaluationTables = {
-        {0x31CDE1EBFFEBCE00, 0x31D7D7F5FFF5D800, 0x31E1D7F5FFF5E200, 0x31EBCDFAFFF5E200},
-        {0x31E1E1F604F5D80A, 0x13EBD80009FFEC0A, 0x13F5D8000A000014, 0x13FFCE000A00001E},
-        {0x31E1E1F5FAF5E232, 0x13F5D80000000032, 0x0013D80500050A32, 0x001DCE05000A0F32},
-        {0x31E1E1FAFAF5E205, 0x13F5D80000050505, 0x001DD80500050F0A, 0xEC27CE05000A1419},
-        {0x31E1EBFFFAF5E200, 0x13F5E20000000000, 0x001DE205000A0F00, 0xEC27D805000A1414},
-        {0x31E1F5F5FAF5E205, 0x13F5EC05000A04FB, 0x0013EC05000A09F6, 0x001DEC05000A0F00},
-        {0x31E213F5FAF5D805, 0x13E214000004EC0A, 0x140000050000000A, 0x14000000000004EC},
-        {0x31CE13EBFFEBCE00, 0x31E21DF5FFF5D800, 0x31E209F5FFF5E200, 0x31E1FFFB04F5E200}
+        {0xFFCDE1EBFFEBCE00, 0xFFD7D7F5FFF5D800, 0xFFE1D7F5FFF5E200, 0xFFEBCDFAFFF5E200},
+        {0xFFE1E1F604F5D832, 0xFFEBD80009FFEC32, 0xFFF5D8000A000032, 0xFFFFCE000A000032},
+        {0xFFE1E1F5FAF5E20A, 0xFFF5D8000000000A, 0x0013D80500050A14, 0x001DCE05000A0F1E},
+        {0xFFE1E1FAFAF5E205, 0xFFF5D80000050505, 0x001DD80500050F0A, 0x0027CE05000A1419},
+        {0xFFE1EBFFFAF5E200, 0xFFF5E20000000000, 0x001DE205000A0F00, 0x0027D805000A1414},
+        {0xFFE1F5F5FAF5E205, 0xFFF5EC05000A04FB, 0x0013EC05000A09F6, 0x001DEC05000A0F00},
+        {0xFFE213F5FAF5D805, 0xFFE214000004EC0A, 0x000000050000000A, 0x00000000000004EC},
+        {0xFFCE13EBFFEBCE00, 0xFFE21DF5FFF5D800, 0xFFE209F5FFF5E200, 0xFFE1FFFAFFF5E200}
     };
 
     public int GetSquareBonus(PieceType type, bool isWhite, int file, int rank)
@@ -271,8 +276,7 @@ public class MyBot : IChessBot
         foreach (PieceList list in currentBoard.GetAllPieceLists())
         {
             // Material evaluation
-            int multiplier = list.IsWhitePieceList ? 1 : -1;
-            score += PieceValues[(int)list.TypeOfPieceInList] * list.Count * multiplier;
+            score += PieceValues[(int)list.TypeOfPieceInList] * list.Count * (list.IsWhitePieceList ? 1 : -1);
 
             // Placement evaluation
             foreach (Piece piece in list)
