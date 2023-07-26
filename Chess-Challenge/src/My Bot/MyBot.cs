@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using static ChessChallenge.Chess.FenUtility;
 
 // TODO: MOST IMPORTANT: Null move pruning
 // TODO: King safety
@@ -9,8 +10,6 @@ using System.Linq;
 
 public class MyBot : IChessBot
 {
-    TranspositionTable transpositionTable = new();
-
     // None, Pawn, Knight, Bishop, Rook, Queen, King 
     private readonly int[] PieceValues = { 0, 100, 320, 320, 500, 900, 0 };
 
@@ -18,37 +17,163 @@ public class MyBot : IChessBot
     private Timer searchTimer;
     private bool OutOfTime => searchTimer.MillisecondsElapsedThisTurn > searchMaxTime;
 
+    Board currentBoard;
+
+    //
+    // Search
+    //
+
     public Move Think(Board board, Timer timer)
     {
-        Move[] moves = OrderMoves(board.GetLegalMoves());
-
-        // One less than the minimum evaluation so that there will never be no move chosen even if there are no legal moves
-        int bestScore = -10000000;
-        Move bestMove = moves[0];
+        // Cache the board to save precious tokens
+        currentBoard = board;
 
         // One fifteenth of our remaining time, split among all of the moves
         searchMaxTime = timer.MillisecondsRemaining / 15;
         searchTimer = timer;
 
-        // No max depth, keep going until time limit is reached
         for (int depth = 1; ; depth++)
-            foreach (Move move in moves)
-            {
-                board.MakeMove(move);
-                int moveScore = -PVS(board, depth, -9999999, 9999999, board.IsWhiteToMove ? 1 : -1);
-                board.UndoMove(move);
+        {
+            PVS(depth, -9999999, 9999999, board.IsWhiteToMove ? 1 : -1);
 
-                // Place this after the negamax in case we ran out of time during the negamax search
-                if (OutOfTime)
-                    return bestMove;
-
-                if (moveScore > bestScore)
-                {
-                    bestScore = moveScore;
-                    bestMove = move;
-                }
-            }
+            if (OutOfTime)
+                return TTRetrieve().BestMove;
+        }
     }
+
+    private int PVS(int depth, int alpha, int beta, int colour)
+    {
+        // Evaluate the gamestate
+        if (currentBoard.IsDraw())
+            return 0;
+        if (currentBoard.IsInCheckmate())
+            // Checkmate = 99999
+            // SwiftCheckmateBonus = 5000
+            return colour * (currentBoard.IsWhiteToMove ? -99999 - (depth * 5000) : 99999 + (depth * 5000));
+
+        // Terminal node, calculate score
+        if (depth <= 0)
+            // Do a Quiescence Search with a depth of 3, which will return a score from white's perspective
+            // Multiple that score by -1 for black
+            return QuiescenceSearch(2, alpha, beta, colour);
+
+        // Transposition table lookup
+        TTEntry entry = TTRetrieve();
+
+        // No entry for this position
+        if (entry.Hash != currentBoard.ZobristKey)
+        {
+            // Internal iterative deepening
+            PVS(depth - 2, alpha, beta, colour);
+
+            // Retrieve the new best move found with internal iterative deepening
+            entry = TTRetrieve();
+        }
+        // Found a valid entry for this position
+        else if (entry.Depth >= depth)
+        {
+            switch (entry.Flag)
+            {
+                // Exact
+                case 0:
+                    return entry.Score;
+                // Lowerbound
+                case 1:
+                    alpha = Math.Max(alpha, entry.Score);
+                    break;
+                // Default case for 2 to save a token
+                default:
+                    beta = Math.Min(beta, entry.Score);
+                    break;
+            }
+
+            if (alpha >= beta)
+                return entry.Score;
+        }
+
+        // Search at a deeper depth
+        Move[] moves = GetOrdererdMoves(entry.BestMove, false);
+
+        int bestEval = -9999999;
+        Move bestMove = moves[0];
+
+        int i = 0;
+        foreach (Move move in moves)
+        {
+            currentBoard.MakeMove(move);
+            int eval;
+
+            // Always fully search the first child
+            if (i == 0)
+                eval = -PVS(depth - 1, -beta, -bestEval, -colour);
+            else
+                eval = -PVS(depth - 1, -alpha - 1, -alpha, -colour);
+
+            // Research if failed high
+            if (alpha < bestEval && bestEval < beta)
+                eval = -PVS(depth - 1, -beta, -bestEval, -colour);
+
+            currentBoard.UndoMove(move);
+
+            if (OutOfTime)
+                return 0;
+
+            if (eval > bestEval)
+            {
+                if (eval >= beta)
+                {
+                    TTInsert(move, eval, depth, 2);
+                    return eval;
+                }
+
+                bestMove = move;
+                bestEval = eval;
+                alpha = Math.Max(alpha, bestEval);
+            }
+            i++;
+        }
+
+        if (bestEval <= alpha)
+            TTInsert(bestMove, bestEval, depth, 1);
+        else
+            TTInsert(bestMove, bestEval, depth, 0);
+
+        return alpha;
+    }
+
+    // Quiescence search with help from
+    // https://stackoverflow.com/questions/48846642/is-there-something-wrong-with-my-quiescence-search
+    private int QuiescenceSearch(int depth, int alpha, int beta, int colour)
+    {
+        // Determine if quiescence search should be continued
+        int bestValue = colour * Evaluate();
+
+        alpha = Math.Max(alpha, bestValue);
+        if (alpha >= beta)
+            return bestValue;
+
+        // If in check, look into all moves, otherwise just captures
+        // Also no hash move for Quiescence search
+        foreach (Move move in GetOrdererdMoves(Move.NullMove, !currentBoard.IsInCheck()))
+        {
+            currentBoard.MakeMove(move);
+            int eval = -QuiescenceSearch(depth - 1, -beta, -alpha, -colour);
+            currentBoard.UndoMove(move);
+
+            if (OutOfTime)
+                return 0;
+
+            bestValue = Math.Max(bestValue, eval);
+            alpha = Math.Max(alpha, bestValue);
+            if (alpha >= beta)
+                break;
+        }
+        return bestValue;
+    }
+
+    //
+    // Move Ordering
+    //
 
     // Generates the comment inside, but with 25 fewer tokens
     private int GetMVV_LVA(PieceType victim, PieceType attacker)
@@ -76,114 +201,12 @@ public class MyBot : IChessBot
         }
     }
 
-    private Move[] OrderMoves(Move[] moves)
-        // Little scoring algorithm using MVVLVA
-        => moves.OrderByDescending(move => GetMVV_LVA(move.CapturePieceType, move.MovePieceType)).ToArray();
-
-    private int PVS(Board board, int depth, int alpha, int beta, int colour)
-    {
-        int originalAlpha = alpha;
-
-        // Transposition table lookup
-        PositionInfo position = transpositionTable.Lookup(board.ZobristKey);
-        if (position.IsValid && position.depthChecked >= depth)
-        {
-            switch (position.flag)
-            {
-                case Flag.Exact:
-                    return position.score;
-                case Flag.Lowerbound:
-                    alpha = Math.Max(alpha, position.score);
-                    break;
-                // Default case for PositionInfo.Flag.Lowerbound to save tokens
-                default:
-                    beta = Math.Min(beta, position.score);
-                    break;
-            }
-
-            if (alpha >= beta)
-                return position.score;
-        }
-
-        // Evaluate the gamestate
-        if (board.IsDraw())
-            return 0;
-        if (board.IsInCheckmate())
-            // Checkmate = 99999
-            // SwiftCheckmateBonus = 5000
-            return colour * (board.IsWhiteToMove ? -99999 - (depth * 5000) : 99999 + (depth * 5000));
-
-        // Terminal node, calculate score
-        if (depth <= 0)
-            // Do a Quiescence Search with a depth of 3, which will return a score from white's perspective
-            // Multiple that score by -1 for black
-            return QuiescenceSearch(board, 2, alpha, beta, colour);
-
-        // Search at a deeper depth
-        Move[] moves = OrderMoves(board.GetLegalMoves());
-        int eval = -9999999;
-        foreach (Move move in moves)
-        {
-            board.MakeMove(move);
-            eval = -PVS(board, depth - 1, -alpha - 1, -alpha, -colour);
-            if (alpha < eval && eval < beta)
-                eval = -PVS(board, depth - 1, -beta, -eval, -colour);
-
-            // Old Negamax search logic
-            // eval = Math.Max(eval, -PVS(board, depth - 1, -beta, -alpha, -colour));
-            board.UndoMove(move);
-
-            if (OutOfTime)
-                return 0;
-
-            // If there is a worse branching path, cut this branch
-            // as this move won't be benificial assuming the opponent plays the best move
-            alpha = Math.Max(alpha, eval);
-            if (alpha >= beta)
-                break;
-        }
-
-        // Transposition table storage
-        Flag flag = Flag.Exact;
-        if (eval <= originalAlpha)
-            flag = Flag.Upperbound;
-        else if (eval >= beta)
-            flag = Flag.Lowerbound;
-
-        PositionInfo positionInfo = new(eval, depth, flag);
-        transpositionTable.Add(board.ZobristKey, positionInfo);
-
-        return alpha;
-    }
-
-    // Quiescence search with help from
-    // https://stackoverflow.com/questions/48846642/is-there-something-wrong-with-my-quiescence-search
-    private int QuiescenceSearch(Board board, int depth, int alpha, int beta, int colour)
-    {
-        // Determine if quiescence search should be continued
-        int bestValue = colour * Evaluate(board);
-
-        alpha = Math.Max(alpha, bestValue);
-        if (alpha >= beta)
-            return bestValue;
-
-        // If in check, look into all moves, otherwise just captures
-        foreach (Move move in OrderMoves(board.GetLegalMoves(!board.IsInCheck())))
-        {
-            board.MakeMove(move);
-            int eval = -QuiescenceSearch(board, depth - 1, -beta, -alpha, -colour);
-            board.UndoMove(move);
-
-            if (OutOfTime)
-                return 0;
-
-            bestValue = Math.Max(bestValue, eval);
-            alpha = Math.Max(alpha, bestValue);
-            if (alpha >= beta)
-                break;
-        }
-        return bestValue;
-    }
+    // Scoring algorithm using MVVLVA
+    // Taking into account the best move found from the previous search
+    private Move[] GetOrdererdMoves(Move hashMove, bool onlyCaptures)
+        => currentBoard.GetLegalMoves(onlyCaptures).OrderByDescending(move =>
+        GetMVV_LVA(move.CapturePieceType, move.MovePieceType) +
+        (move == hashMove ? 100 : 0)).ToArray();
 
     //
     // Evaluation
@@ -245,10 +268,10 @@ public class MyBot : IChessBot
 
     // => instead of return { }
     // because it saves one token
-    private int Evaluate(Board board)
+    private int Evaluate()
     {
         int score = 0;
-        foreach (PieceList list in board.GetAllPieceLists())
+        foreach (PieceList list in currentBoard.GetAllPieceLists())
         {
             // Material evaluation
             int multiplier = list.IsWhitePieceList ? 1 : -1;
@@ -260,42 +283,39 @@ public class MyBot : IChessBot
                 score += GetSquareBonus(piece.Square, piece.PieceType, piece.IsWhite) * multiplier;
             }
         }
-        return score;
+        return currentBoard.IsWhiteToMove ? score : -score;
     }
-}
 
-//
-// Transposition table
-//
+    //
+    // Transposition table
+    //
 
-public class TranspositionTable
-{
-    private readonly Dictionary<ulong, PositionInfo> table = new();
-    private readonly Queue<ulong> addedPositions = new();
+    private readonly TTEntry[] transpositionTable = new TTEntry[340000];
 
-    public void Add(ulong zobristKey, PositionInfo parameters)
+    private TTEntry TTRetrieve()
+        => transpositionTable[currentBoard.ZobristKey % 340000];
+
+    private void TTInsert(Move bestMove, int score, int depth, byte flag)
     {
-        if (table.TryAdd(zobristKey, parameters))
-        {
-            addedPositions.Enqueue(zobristKey);
+        if (depth > 1)
+            transpositionTable[currentBoard.ZobristKey % 1000000] = new TTEntry(
+                currentBoard.ZobristKey, 
+                bestMove, 
+                score, 
+                depth, 
+                flag);
 
-            // A very rough approximation of how many transposition table entries it would take to reach 256mb
-            if (table.Count > 340000)
-                table.Remove(addedPositions.Dequeue());
-        }
     }
 
-    public PositionInfo Lookup(ulong zobristKey)
-        => table.TryGetValue(zobristKey, out PositionInfo parameters) ? parameters : PositionInfo.Invalid;
-}
-
-public enum Flag
-{
-    Upperbound, Lowerbound, Exact
-}
-
-public record struct PositionInfo(int score, int depthChecked, Flag flag)
-{
-    public readonly bool IsValid => depthChecked > 0;
-    public static PositionInfo Invalid => new(int.MinValue, -1, Flag.Exact);
+    // public enum Flag
+    // {
+    //     0 = Exact,
+    //     1 = Upperbound,
+    //     2 = Lowerbound
+    // }
+    public record struct TTEntry(ulong Hash, Move BestMove, int Score, int Depth, byte Flag)
+    {
+        public readonly bool IsValid => Depth > 0;
+        public static TTEntry Invalid => new(0, Move.NullMove, 0, -1, 0);
+    }
 }
