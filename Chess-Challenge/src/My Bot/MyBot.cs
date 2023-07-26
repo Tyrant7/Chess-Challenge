@@ -1,8 +1,6 @@
 ﻿using ChessChallenge.API;
-using Microsoft.Win32.SafeHandles;
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Linq;
 
 // TODO: MOST IMPORTANT: Null move pruning
@@ -37,7 +35,7 @@ public class MyBot : IChessBot
             foreach (Move move in moves)
             {
                 board.MakeMove(move);
-                int moveScore = -Negamax(board, depth, -9999999, 9999999, board.IsWhiteToMove ? 1 : -1);
+                int moveScore = -PVS(board, depth, -9999999, 9999999, board.IsWhiteToMove ? 1 : -1);
                 board.UndoMove(move);
 
                 // Place this after the negamax in case we ran out of time during the negamax search
@@ -82,7 +80,7 @@ public class MyBot : IChessBot
         // Little scoring algorithm using MVVLVA
         => moves.OrderByDescending(move => GetMVV_LVA(move.CapturePieceType, move.MovePieceType)).ToArray();
 
-    private int Negamax(Board board, int depth, int alpha, int beta, int colour)
+    private int PVS(Board board, int depth, int alpha, int beta, int colour)
     {
         int originalAlpha = alpha;
 
@@ -127,7 +125,12 @@ public class MyBot : IChessBot
         foreach (Move move in moves)
         {
             board.MakeMove(move);
-            eval = Math.Max(eval, -Negamax(board, depth - 1, -beta, -alpha, -colour));
+            eval = -PVS(board, depth - 1, -alpha - 1, -alpha, -colour);
+            if (alpha < eval && eval < beta)
+                eval = -PVS(board, depth - 1, -beta, -eval, -colour);
+
+            // Old Negamax search logic
+            // eval = Math.Max(eval, -PVS(board, depth - 1, -beta, -alpha, -colour));
             board.UndoMove(move);
 
             if (OutOfTime)
@@ -150,7 +153,7 @@ public class MyBot : IChessBot
         PositionInfo positionInfo = new(eval, depth, flag);
         transpositionTable.Add(board.ZobristKey, positionInfo);
 
-        return eval;
+        return alpha;
     }
 
     // Quiescence search with help from
@@ -243,15 +246,22 @@ public class MyBot : IChessBot
     // => instead of return { }
     // because it saves one token
     private int Evaluate(Board board)
+    {
+        int score = 0;
+        foreach (PieceList list in board.GetAllPieceLists())
+        {
+            // Material evaluation
+            int multiplier = list.IsWhitePieceList ? 1 : -1;
+            score += PieceValues[(int)list.TypeOfPieceInList] * list.Count * multiplier;
 
-        // Material evaluation
-        => board.GetAllPieceLists()
-            .Sum(list => PieceValues[(int)list.TypeOfPieceInList] * list.Count * (list.IsWhitePieceList ? 1 : -1))
-
-        // Placement evaluation
-        +  board.GetAllPieceLists()
-            .SelectMany(list => list)
-            .Sum(piece => (piece.IsWhite ? 1 : -1) * GetSquareBonus(piece.Square, piece.PieceType, piece.IsWhite));
+            // Placement evaluation
+            foreach (Piece piece in list)
+            {
+                score += GetSquareBonus(piece.Square, piece.PieceType, piece.IsWhite) * multiplier;
+            }
+        }
+        return score;
+    }
 }
 
 //

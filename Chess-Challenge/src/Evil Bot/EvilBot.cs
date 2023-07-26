@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 
 namespace ChessChallenge.Example
 {
@@ -9,216 +10,242 @@ namespace ChessChallenge.Example
     // Plays randomly otherwise.
     public class EvilBot : IChessBot
     {
-        TranspositionTable transpositionTable = new();
+        ulong[] historyHeuristic;
+        int nodes = 0;
+        Board board;
 
-        // None, Pawn, Knight, Bishop, Rook, Queen, King 
-        private readonly int[] PieceValues = { 0, 100, 320, 320, 500, 900, 0 };
-
-        // MVV_LVA [victim - 1, attacker - 1]
-        private readonly int[,] MVV_LVA =
+        public Move Think(Board startBoard, Timer timer)
         {
-        // When accessing, since none is not an opiton, use victim - 1 and attacker - 1 since pawns are indexed at 0
-        // Also exclude kings from being the victim because they cannot be captured
-        { 15, 14, 13, 12, 11, 10 }, // victim P, attacker P, N, B, R, Q, K
-        { 25, 24, 23, 22, 21, 20 }, // victim N, attacker P, N, B, R, Q, K
-        { 35, 34, 33, 32, 31, 30 }, // victim B, attacker P, N, B, R, Q, K
-        { 45, 44, 43, 42, 41, 40 }, // victim R, attacker P, N, B, R, Q, K
-        { 55, 54, 53, 52, 51, 50 }, // victim Q, attacker P, N, B, R, Q, K
-    };
+            historyHeuristic = new ulong[4096];
+            board = startBoard;
+            nodes = 0;
 
-        private int searchMaxTime;
-        private Timer searchTimer;
-        private bool OutOfTime => searchTimer.MillisecondsElapsedThisTurn > searchMaxTime;
-
-        public Move Think(Board board, Timer timer)
-        {
-            Move[] moves = OrderMoves(board, board.GetLegalMoves());
-
-            // One less than the minimum evaluation so that there will never be no move chosen even if there are no legal moves
-            int bestScore = -10000000;
-            Move bestMove = moves[0];
-
-            // One fifteenth of our remaining time, split among all of the moves
-            searchMaxTime = timer.MillisecondsRemaining / 15;
-            searchTimer = timer;
-
-            // No max depth, keep going until time limit is reached
-            for (int depth = 1; ; depth++)
-                foreach (Move move in moves)
-                {
-                    board.MakeMove(move);
-                    int moveScore = -Negamax(board, depth, -9999999, 9999999, board.IsWhiteToMove ? 1 : -1);
-                    board.UndoMove(move);
-
-                    // Place this after the negamax in case we ran out of time during the negamax search
-                    if (OutOfTime)
-                        return bestMove;
-
-                    if (moveScore > bestScore)
-                    {
-                        bestScore = moveScore;
-                        bestMove = move;
-                    }
-                }
-        }
-
-        private Move[] OrderMoves(Board board, Move[] moves)
-            => moves.OrderByDescending(move => ScoreMove(board, move)).ToArray();
-
-        private int ScoreMove(Board board, Move move)
-            => move.CapturePieceType != PieceType.None ? MVV_LVA[(int)move.CapturePieceType - 1, (int)move.MovePieceType - 1] : 0;
-
-        private int Negamax(Board board, int depth, int alpha, int beta, int colour)
-        {
-            if (OutOfTime)
-                return 0;
-
-            int originalAlpha = alpha;
-
-            // Transposition table lookup
-            PositionInfo position = transpositionTable.Lookup(board.ZobristKey);
-            if (position.IsValid && position.depthChecked >= depth)
+            for (int i = 2; i < 30; i++)
             {
-                switch (position.flag)
-                {
-                    case Flag.Exact:
-                        return position.score;
-                    case Flag.Lowerbound:
-                        alpha = Math.Max(alpha, position.score);
-                        break;
-                    // Default case for PositionInfo.Flag.Lowerbound to save tokens
-                    default:
-                        beta = Math.Min(beta, position.score);
-                        break;
-                }
-
-                if (alpha >= beta)
-                    return position.score;
+                if (AlphaBeta(-10000, 10000, i) >= 9000 || timer.MillisecondsElapsedThisTurn > 300) break;
             }
 
-            // Evaluate the gamestate
-            if (board.IsDraw())
-                return 0;
-            if (board.IsInCheckmate())
-                // Checkmate = 99999
-                // SwiftCheckmateBonus = 5000
-                return colour * (board.IsWhiteToMove ? -99999 - (depth * 5000) : 99999 + (depth * 5000));
+            Entry entry = TableGet();
+            Console.WriteLine("Depth: {0}, Eval: {1}, Time: {2} Nodes: {3}\n", entry.depth, entry.score, timer.MillisecondsElapsedThisTurn, nodes);
+            nodes = 0;
 
-            // Terminal node, calculate score
+            return entry.bestMove;
+        }
+
+        int AlphaBeta(int alpha, int beta, int depth)
+        {
+            if (board.IsRepeatedPosition()) return -30;
+
             if (depth <= 0)
-                // Score from white's perspective, times -1 for black
-                return colour * (EvaluateMaterial(board) + EvaluateSquares(board));
+                return QSearch(alpha, beta);
 
-            // Search at a deeper depth
-            Move[] moves = OrderMoves(board, board.GetLegalMoves());
-            int eval = -9999999;
+            Entry entry = TableGet();
+            if (entry.hash != board.ZobristKey)
+            {
+                // Internal iterative deepening
+                AlphaBeta(alpha, beta, depth - 2);
+                entry = TableGet();
+            }
+
+            else if (entry.depth >= depth)
+            {
+                if (entry.boundType == 0)
+                    return entry.score; // Exact 
+                else if (entry.boundType == -1)
+                    alpha = Math.Max(alpha, entry.score); // Lowerbound TODO: change to non negative number for 
+                else
+                    beta = Math.Min(beta, entry.score); // Upperbound
+                if (alpha >= beta) return entry.score;
+            }
+
+            var moves = GetOrderedMoves(false, entry.bestMove); // Pass table move in, maybe we can just TableGet() twice?
+
+            bool inCheck = board.IsInCheck();
+            if (moves.Length == 0)
+            {
+                if (inCheck)
+                    return -(9000 + board.PlyCount);
+                else
+                    return 0;
+            }
+
+            int bestScore = -10000;
+            Move bestMove = moves[0];
+
+            int i = 0;
+            foreach (Move move in moves)
+            {
+                int R = 1;
+                if (i > 4 && !move.IsCapture && depth > 2 && !inCheck) R = 2 + i / 12;
+
+                board.MakeMove(move);
+                int score = -AlphaBeta(-beta, -alpha, depth - R);
+                board.UndoMove(move);
+
+                if (score > bestScore)
+                {
+                    if (score >= beta)
+                    {
+                        TableSet(move, score, -1, depth);
+                        if (!move.IsCapture)
+                            historyHeuristic[move.StartSquare.Index + (64 * move.TargetSquare.Index)] += (ulong)1 << depth;
+                        return score;
+                    }
+
+                    bestMove = move;
+                    bestScore = score;
+                    alpha = Math.Max(alpha, score);
+                }
+                i++;
+            }
+
+            if (bestScore <= alpha)
+                TableSet(bestMove, bestScore, 1, depth);
+            else
+                TableSet(bestMove, bestScore, 0, depth);
+
+            return bestScore;
+        }
+
+
+        int QSearch(int alpha, int beta)
+        {
+            bool inCheck = board.IsInCheck();
+
+            // When we are in check we allow it to search non captures so we don't reach an illegal position
+            var moves = GetOrderedMoves(!inCheck, Move.NullMove);
+
+            if (moves.Length == 0 && inCheck)
+                if (inCheck)
+                    return -9000;
+            // We don't do stalemate check because otherwise itll say its a draw everytime no capture is possible
+
+            // We get an evaluation of the current "standing pattern" as its possible that all captures in a position are bad, and none should be played
+            // We obviously can't just stand around when in check either
+
+            if (!inCheck)
+            {
+                int standPat = evaluation();
+                if (standPat >= beta)
+                    return beta;
+                alpha = Math.Max(alpha, standPat);
+            }
+
             foreach (Move move in moves)
             {
                 board.MakeMove(move);
-                eval = Math.Max(eval, -Negamax(board, depth - 1, -beta, -alpha, -colour));
+                int score = -QSearch(-beta, -alpha);
                 board.UndoMove(move);
 
-                if (OutOfTime)
-                    return 0;
-
-                // If there is a worse branching path, cut this branch
-                // as this move won't be benificial assuming the opponent plays the best move
-                alpha = Math.Max(alpha, eval);
-                if (alpha >= beta)
-                    break;
+                if (score >= beta)
+                    return score;
+                alpha = Math.Max(alpha, score);
             }
 
-            // Transposition table storage
-            Flag flag = Flag.Exact;
-            if (eval <= originalAlpha)
-                flag = Flag.Upperbound;
-            else if (eval >= beta)
-                flag = Flag.Lowerbound;
-
-            PositionInfo positionInfo = new(eval, depth, flag);
-            transpositionTable.Add(board.ZobristKey, positionInfo);
-
-            return eval;
+            return alpha;
         }
 
-        // => instead of return { }
-        // because it saves one token
-        private int EvaluateMaterial(Board board)
-            => board.GetAllPieceLists()
-                .Sum(list => PieceValues[(int)list.TypeOfPieceInList] * list.Count * (list.IsWhitePieceList ? 1 : -1));
+        // Essentially this performs the very simple Selection Sort algorithm, to order moves based on a numerical priority
+        // Ideally you would sort this as each move is being played, as a beta cutoff may occur in the first few moves
+        // Thus you can save some time by not sorting the remaining moves 
 
-        private int EvaluateSquares(Board board)
-            => board.GetAllPieceLists()
-                .SelectMany(list => list)
-                .Sum(piece => (piece.IsWhite ? 1 : -1) * GetSquareBonus(piece.Square, piece.PieceType, piece.IsWhite));
+        // TODO: See if we can get Array.Sort(keys, values) to work as this could in theory provide a saving of approx 100 tokens
 
-        // Evaluation
-
-        private static int[] DistFromCentre =
-{
-        3, 3, 3, 3, 3, 3, 3, 3,
-        3, 2, 2, 2, 2, 2, 2, 3,
-        3, 2, 1, 1, 1, 1, 2, 3,
-        3, 2, 1, 0, 0, 1, 2, 3,
-        3, 2, 1, 0, 0, 1, 2, 3,
-        3, 2, 1, 1, 1, 1, 2, 3,
-        3, 2, 2, 2, 2, 2, 2, 3,
-        3, 3, 3, 3, 3, 3, 3, 3
-    };
-
-        // NOT CURRENTLY WORTH IT TO HAVE
-        // Generates an array identical to the one above, but in 1 fewer token
-        // Courtesy of ChatGPT for this code. I have very little idea on how it works
-        /*
-        private static int[] DistFromCentre = new int[64]
-            .Select((_, i) =>
-                Math.Max(Math.Max(Math.Abs(i % 8 - 3), Math.Abs(i / 8 - 3)),
-                Math.Max(Math.Abs(i % 8 - 4), Math.Abs(i / 8 - 4))) - 1
-            ).ToArray();
-        */
-
-        public static int GetSquareBonus(Square square, PieceType type, bool isWhite)
+        Move[] GetOrderedMoves(bool onlyCaptures, Move hashMove)
         {
-            int rank = isWhite ? square.Rank : 7 - square.Rank;
-            int centreDist = DistFromCentre[square.Index] - (type == PieceType.Pawn ? 0 : 1);
+            var moves = board.GetLegalMoves(onlyCaptures); //TODO: investigate if GetLegalMovesNonAlloc() is better
+            var priority = new int[moves.Length];
 
-            switch (type)
+            int i = 0;
+            foreach (Move move in moves)
             {
-                // Use some simple equations to determine generally good squares without using a table
-                case PieceType.Pawn:
-                    // Pawn gets bonuses for being further forward
-                    // but also get a bonus for being close to the centre
-                    return rank * 5 + (centreDist == 1 ? 10 : 0) + (centreDist == 0 ? 15 : 0);
-                case PieceType.Knight:
-                    // Get a bonus for being in the centre, and a penalty for being further away
-                    return -centreDist * 15;
-                case PieceType.Bishop:
-                    // Same here, but less
-                    return -centreDist * 10;
-                case PieceType.Rook:
-                    // Bonus for sitting on second or seventh rank, depending on side
-                    return (square.Rank == (isWhite ? 6 : 1)) ? 10 : 0;
-                case PieceType.Queen:
-                    // Bonus for being in centre, just like knights, but less
-                    return -centreDist * 5;
-                case PieceType.King:
-                    // King gets a base +10 bonus for being on back rank, then -10 for every step forward
-                    return (-rank * 10) + 10;
+                if (move == hashMove)
+                    priority[i] = 100;
+                else if (move.IsCapture)
+                    priority[i] = 10 * (int)move.CapturePieceType - (int)move.MovePieceType;
+                else
+                    priority[i] = 64 - BitOperations.LeadingZeroCount(historyHeuristic[move.StartSquare.Index + (64 * move.TargetSquare.Index)]);
+                i++;
             }
-            return 0;
+
+            // TODO:  PLEASE REWRITE THIS DUMBASS SORT
+            // Selection Sort
+            for (i = 0; i < moves.Length; i++)
+            {
+                // Loop through all unsorted moves to find max priority
+                int chosenIndex = i;
+                int highestPriority = -1000000;
+                for (int j = i; j < moves.Length; j++)
+                {
+                    if (priority[j] > highestPriority)
+                    {
+                        chosenIndex = j;
+                        highestPriority = priority[j];
+                    }
+                }
+                // Then put the highest priority move at the front
+                // Repeat until no unsorted moves remain
+
+                (priority[i], priority[chosenIndex]) = (priority[chosenIndex], priority[i]);
+                (moves[i], moves[chosenIndex]) = (moves[chosenIndex], moves[i]);
+
+            }
+
+            return moves;
         }
 
-        // => instead of return { }
-        // because it saves one token
-        private int Evaluate(Board board)
 
-            // Material evaluation
-            => board.GetAllPieceLists()
-                .Sum(list => PieceValues[(int)list.TypeOfPieceInList] * list.Count * (list.IsWhitePieceList ? 1 : -1))
+        int evaluation()
+        {
+            nodes += 1;
+            var pieceWeights = new int[] { 100, 280, 320, 500, 900 };
+            var pieceTypes = new PieceType[] { PieceType.Pawn, PieceType.Knight, PieceType.Bishop, PieceType.Rook, PieceType.Queen };
+            ulong bordermagic = 18411139144890810879;
 
-            // Placement evaluation
-            + board.GetAllPieceLists()
-                .SelectMany(list => list)
-                .Sum(piece => (piece.IsWhite ? 1 : -1) * GetSquareBonus(piece.Square, piece.PieceType, piece.IsWhite));
+            int score = 0;
+
+            for (int i = 0; i < 5; i++)
+            {
+                ulong whitePieces = board.GetPieceBitboard(pieceTypes[i], true);
+                ulong blackPieces = board.GetPieceBitboard(pieceTypes[i], false);
+                score += pieceWeights[i] * (BitOperations.PopCount(whitePieces) - BitOperations.PopCount(blackPieces));
+                score -= 15 * (BitOperations.PopCount(whitePieces & bordermagic) - BitOperations.PopCount(blackPieces & bordermagic));
+
+            }
+
+            if (!board.IsWhiteToMove)
+                score = -score;
+
+            return score;
+        }
+
+
+        Entry[] transpositionTable = new Entry[1000000];
+
+        Entry TableGet()
+        {
+            return transpositionTable[board.ZobristKey % 1000000];
+        }
+
+        struct Entry
+        {
+            public ulong hash;
+            public int depth, score;
+            public Move bestMove;
+            public sbyte boundType;
+        }
+
+        void TableSet(Move bestMove, int score, sbyte boundType, int depth)
+        {
+            if (depth > 1)
+                transpositionTable[board.ZobristKey % 1000000] = new Entry
+                {
+                    hash = board.ZobristKey,
+                    depth = depth,
+                    boundType = boundType,
+                    bestMove = bestMove,
+                    score = score
+                };
+        }
     }
 }
