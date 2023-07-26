@@ -1,10 +1,10 @@
 ﻿using ChessChallenge.API;
 using System;
-using System.Collections.Generic;
 using System.Linq;
-using static ChessChallenge.Chess.FenUtility;
 
-// TODO: MOST IMPORTANT: Null move pruning
+// TODO: Passed pawn evaluation
+// TODO: Full piece square tables
+// TODO: Null move pruning
 // TODO: King safety
 // TODO: Check extensions
 
@@ -32,16 +32,19 @@ public class MyBot : IChessBot
         searchMaxTime = timer.MillisecondsRemaining / 15;
         searchTimer = timer;
 
-        for (int depth = 1; ; depth++)
+        // Progressively increase search depth, starting from 2
+        for (int depth = 2; ; depth++)
         {
-            PVS(depth, -9999999, 9999999, board.IsWhiteToMove ? 1 : -1);
+            Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms");
+
+            PVS(depth, -9999999, 9999999);
 
             if (OutOfTime)
                 return TTRetrieve().BestMove;
         }
     }
 
-    private int PVS(int depth, int alpha, int beta, int colour)
+    private int PVS(int depth, int alpha, int beta)
     {
         // Evaluate the gamestate
         if (currentBoard.IsDraw())
@@ -49,13 +52,13 @@ public class MyBot : IChessBot
         if (currentBoard.IsInCheckmate())
             // Checkmate = 99999
             // SwiftCheckmateBonus = 5000
-            return colour * (currentBoard.IsWhiteToMove ? -99999 - (depth * 5000) : 99999 + (depth * 5000));
+            return -(99999 + (depth * 5000));
 
         // Terminal node, calculate score
         if (depth <= 0)
             // Do a Quiescence Search with a depth of 3, which will return a score from white's perspective
             // Multiple that score by -1 for black
-            return QuiescenceSearch(2, alpha, beta, colour);
+            return QuiescenceSearch(2, alpha, beta);
 
         // Transposition table lookup
         TTEntry entry = TTRetrieve();
@@ -64,7 +67,7 @@ public class MyBot : IChessBot
         if (entry.Hash != currentBoard.ZobristKey)
         {
             // Internal iterative deepening
-            PVS(depth - 2, alpha, beta, colour);
+            PVS(depth - 2, alpha, beta);
 
             // Retrieve the new best move found with internal iterative deepening
             entry = TTRetrieve();
@@ -78,10 +81,10 @@ public class MyBot : IChessBot
                 case 0:
                     return entry.Score;
                 // Lowerbound
-                case 1:
+                case -1:
                     alpha = Math.Max(alpha, entry.Score);
                     break;
-                // Default case for 2 to save a token
+                // Default case for upperbound (1) to save a token
                 default:
                     beta = Math.Min(beta, entry.Score);
                     break;
@@ -105,13 +108,16 @@ public class MyBot : IChessBot
 
             // Always fully search the first child
             if (i == 0)
-                eval = -PVS(depth - 1, -beta, -bestEval, -colour);
+                eval = -PVS(depth - 1, -beta, -alpha);
             else
-                eval = -PVS(depth - 1, -alpha - 1, -alpha, -colour);
+            {
+                // Search with a null window
+                eval = -PVS(depth - 1, -alpha - 1, -alpha);
 
-            // Research if failed high
-            if (alpha < bestEval && bestEval < beta)
-                eval = -PVS(depth - 1, -beta, -bestEval, -colour);
+                // Research if failed high
+                if (alpha < eval && eval < beta)
+                    eval = -PVS(depth - 1, -beta, -eval);
+            }
 
             currentBoard.UndoMove(move);
 
@@ -122,7 +128,7 @@ public class MyBot : IChessBot
             {
                 if (eval >= beta)
                 {
-                    TTInsert(move, eval, depth, 2);
+                    TTInsert(move, eval, depth, -1);
                     return eval;
                 }
 
@@ -143,10 +149,18 @@ public class MyBot : IChessBot
 
     // Quiescence search with help from
     // https://stackoverflow.com/questions/48846642/is-there-something-wrong-with-my-quiescence-search
-    private int QuiescenceSearch(int depth, int alpha, int beta, int colour)
+    private int QuiescenceSearch(int depth, int alpha, int beta)
     {
+        // Evaluate the gamestate
+        if (currentBoard.IsDraw())
+            return 0;
+        if (currentBoard.IsInCheckmate())
+            // Checkmate = 99999
+            // SwiftCheckmateBonus = 5000
+            return -(99999 + (depth * 5000));
+
         // Determine if quiescence search should be continued
-        int bestValue = colour * Evaluate();
+        int bestValue = Evaluate();
 
         alpha = Math.Max(alpha, bestValue);
         if (alpha >= beta)
@@ -157,7 +171,7 @@ public class MyBot : IChessBot
         foreach (Move move in GetOrdererdMoves(Move.NullMove, !currentBoard.IsInCheck()))
         {
             currentBoard.MakeMove(move);
-            int eval = -QuiescenceSearch(depth - 1, -beta, -alpha, -colour);
+            int eval = -QuiescenceSearch(depth - 1, -beta, -alpha);
             currentBoard.UndoMove(move);
 
             if (OutOfTime)
@@ -290,15 +304,17 @@ public class MyBot : IChessBot
     // Transposition table
     //
 
+    // 340000 represents the rough number of entries it would take to fill 256mb
+    // Very lowballed to make sure I don't go over
     private readonly TTEntry[] transpositionTable = new TTEntry[340000];
 
     private TTEntry TTRetrieve()
         => transpositionTable[currentBoard.ZobristKey % 340000];
 
-    private void TTInsert(Move bestMove, int score, int depth, byte flag)
+    private void TTInsert(Move bestMove, int score, int depth, sbyte flag)
     {
         if (depth > 1)
-            transpositionTable[currentBoard.ZobristKey % 1000000] = new TTEntry(
+            transpositionTable[currentBoard.ZobristKey % 340000] = new TTEntry(
                 currentBoard.ZobristKey, 
                 bestMove, 
                 score, 
@@ -310,10 +326,10 @@ public class MyBot : IChessBot
     // public enum Flag
     // {
     //     0 = Exact,
-    //     1 = Upperbound,
-    //     2 = Lowerbound
+    //     1 = Lowerbound,
+    //     2 = Upperbound
     // }
-    public record struct TTEntry(ulong Hash, Move BestMove, int Score, int Depth, byte Flag)
+    public record struct TTEntry(ulong Hash, Move BestMove, int Score, int Depth, sbyte Flag)
     {
         public readonly bool IsValid => Depth > 0;
         public static TTEntry Invalid => new(0, Move.NullMove, 0, -1, 0);
