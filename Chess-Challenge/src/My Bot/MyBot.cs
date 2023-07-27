@@ -23,16 +23,16 @@ public class MyBot : IChessBot
     private Timer searchTimer;
     private bool OutOfTime => searchTimer.MillisecondsElapsedThisTurn > searchMaxTime;
 
-    Board currentBoard;
+    Board board;
 
     //
     // Search
     //
 
-    public Move Think(Board board, Timer timer)
+    public Move Think(Board newBoard, Timer timer)
     {
         // Cache the board to save precious tokens
-        currentBoard = board;
+        board = newBoard;
 
         // 1/20th of our remaining time, split among all of the moves
         searchMaxTime = Math.Max(timer.MillisecondsRemaining / 30 - 300, 20);
@@ -49,7 +49,7 @@ public class MyBot : IChessBot
             {
                 // Must have come up with a move to return, otherwise keep going until one is found
                 TTEntry entry = TTRetrieve();
-                if (entry.IsValid && entry.BestMove != Move.NullMove)
+                if (entry.Hash == board.ZobristKey && entry.BestMove != Move.NullMove)
                 {
                     Console.WriteLine("Hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " +
                         entry.Score + " centipawns.");
@@ -62,10 +62,10 @@ public class MyBot : IChessBot
     private int PVS(int depth, int alpha, int beta)
     {
         // Evaluate the gamestate
-        if (currentBoard.IsDraw())
+        if (board.IsDraw())
             // Discourage draws slightly, unless losing
             return -15;
-        if (currentBoard.IsInCheckmate())
+        if (board.IsInCheckmate())
             // Checkmate = 99999
             // SwiftCheckmateBonus = 5000
             return -(99999 + (depth * 5000));
@@ -80,7 +80,7 @@ public class MyBot : IChessBot
         TTEntry entry = TTRetrieve();
 
         // No entry for this position
-        if (entry.Hash != currentBoard.ZobristKey || entry == TTEntry.Invalid)
+        if (entry.Hash != board.ZobristKey || entry == TTEntry.Invalid)
         {
             // Internal iterative deepening
             PVS(depth - 2, alpha, beta);
@@ -119,7 +119,7 @@ public class MyBot : IChessBot
         int i = 0;
         foreach (Move move in moves)
         {
-            currentBoard.MakeMove(move);
+            board.MakeMove(move);
             int eval;
 
             // Always fully search the first child
@@ -135,7 +135,7 @@ public class MyBot : IChessBot
                     eval = -PVS(depth - 1, -beta, -eval);
             }
 
-            currentBoard.UndoMove(move);
+            board.UndoMove(move);
 
             if (eval > bestEval)
             {
@@ -167,10 +167,10 @@ public class MyBot : IChessBot
     private int QuiescenceSearch(int depth, int alpha, int beta)
     {
         // Evaluate the gamestate
-        if (currentBoard.IsDraw())
+        if (board.IsDraw())
             // Discourage draws slightly, unless losing
             return -15;
-        if (currentBoard.IsInCheckmate())
+        if (board.IsInCheckmate())
             // Checkmate = 99999
             // SwiftCheckmateBonus = 5000
             return -(99999 + (depth * 5000));
@@ -184,11 +184,11 @@ public class MyBot : IChessBot
 
         // If in check, look into all moves, otherwise just captures
         // Also no hash move for Quiescence search
-        foreach (Move move in GetOrdererdMoves(Move.NullMove, !currentBoard.IsInCheck()))
+        foreach (Move move in GetOrdererdMoves(Move.NullMove, !board.IsInCheck()))
         {
-            currentBoard.MakeMove(move);
+            board.MakeMove(move);
             int eval = -QuiescenceSearch(depth - 1, -beta, -alpha);
-            currentBoard.UndoMove(move);
+            board.UndoMove(move);
 
             bestValue = Math.Max(bestValue, eval);
             alpha = Math.Max(alpha, bestValue);
@@ -231,7 +231,7 @@ public class MyBot : IChessBot
     // Scoring algorithm using MVVLVA
     // Taking into account the best move found from the previous search
     private Move[] GetOrdererdMoves(Move hashMove, bool onlyCaptures)
-        => currentBoard.GetLegalMoves(onlyCaptures).OrderByDescending(move =>
+        => board.GetLegalMoves(onlyCaptures).OrderByDescending(move =>
         GetMVV_LVA(move.CapturePieceType, move.MovePieceType) +
         (move == hashMove ? 100 : 0)).ToArray();
 
@@ -263,11 +263,7 @@ public class MyBot : IChessBot
 
         // First, shift the data so that the correct byte is sitting in the least significant position
         // Then, mask it out
-        sbyte unpackedData = (sbyte)((PackedEvaluationTables[rank, file] >> 8 * ((int)type - 1)) & 0xFF);
-
-        // Merge the sign back into the original unpacked data
-        // by first bitwise-ANDing it in with a sign mask, and then ORing it back into the unpacked data
-        unpackedData = (sbyte)((byte)unpackedData | (0b10000000 & unpackedData));
+        sbyte unpackedData = unchecked((sbyte)((PackedEvaluationTables[rank, file] >> 8 * ((int)type - 1)) & 0xFF));
 
         // Invert eval scores for black pieces
         return isWhite ? unpackedData : -unpackedData;
@@ -276,7 +272,7 @@ public class MyBot : IChessBot
     private int Evaluate()
     {
         int score = 0;
-        foreach (PieceList list in currentBoard.GetAllPieceLists())
+        foreach (PieceList list in board.GetAllPieceLists())
         {
             // Material evaluation
             score += PieceValues[(int)list.TypeOfPieceInList] * list.Count * (list.IsWhitePieceList ? 1 : -1);
@@ -286,7 +282,7 @@ public class MyBot : IChessBot
                 // Leave out multiplier for white and black since it's worked in already in the GetSquareBonus method
                 score += GetSquareBonus(piece.PieceType, piece.IsWhite, piece.Square.File, piece.Square.Rank);
         }
-        return currentBoard.IsWhiteToMove ? score : -score;
+        return board.IsWhiteToMove ? score : -score;
     }
 
     //
@@ -298,13 +294,13 @@ public class MyBot : IChessBot
     private readonly TTEntry[] transpositionTable = new TTEntry[0x400000];
 
     private TTEntry TTRetrieve()
-        => transpositionTable[currentBoard.ZobristKey & 0x3FFFFF];
+        => transpositionTable[board.ZobristKey & 0x3FFFFF];
 
     private void TTInsert(Move bestMove, int score, int depth, sbyte flag)
     {
         if (depth > 1 && depth > TTRetrieve().Depth)
-            transpositionTable[currentBoard.ZobristKey & 0x3FFFFF] = new TTEntry(
-                currentBoard.ZobristKey, 
+            transpositionTable[board.ZobristKey & 0x3FFFFF] = new TTEntry(
+                board.ZobristKey, 
                 bestMove, 
                 score, 
                 depth, 
