@@ -35,7 +35,7 @@ public class MyBot : IChessBot
         board = newBoard;
 
         // 1/20th of our remaining time, split among all of the moves
-        searchMaxTime = Math.Max(timer.MillisecondsRemaining / 30 - 300, 20);
+        searchMaxTime = timer.MillisecondsRemaining / 30;
         searchTimer = timer;
 
         // Progressively increase search depth, starting from 2
