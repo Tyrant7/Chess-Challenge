@@ -1,13 +1,12 @@
-﻿using Chess_Challenge.src.My_Bot;
-using ChessChallenge.API;
+﻿using ChessChallenge.API;
 using System;
-using System.ComponentModel;
-using System.Diagnostics;
 using System.Linq;
 
-// TODO: MOST IMPORTANT: Fix full piece square tables acting strange (probably a packing issue?)
-// TODO: Fine tune quiescence search depth for maximum improvements
-// TODO: Better time management
+// TODO: MOST IMPORTANT: Experiment with different draw speeds using isDraw vs other combinations of draw conditions
+// TODO: MOST IMPORTANT: Implement endgame tables
+// TODO: MOST IMPORTANT: Better time management
+// TODO: MOST IMPORTANT: Experiment with removing internal iterative deepening
+// TODO: MOST IMPORTANT: Remove Quiescence search depth for maximum improvements and use ply to calculate faster mates
 // TODO: History heuristic
 // TODO: Late move reductions
 // TODO: Passed pawn evaluation
@@ -35,8 +34,8 @@ public class MyBot : IChessBot
         // Cache the board to save precious tokens
         currentBoard = board;
 
-        // 1/16th of our remaining time, split among all of the moves
-        searchMaxTime = timer.MillisecondsRemaining / 20;
+        // 1/20th of our remaining time, split among all of the moves
+        searchMaxTime = Math.Max(timer.MillisecondsRemaining / 30 - 300, 20);
         searchTimer = timer;
 
         // Progressively increase search depth, starting from 2
@@ -51,7 +50,11 @@ public class MyBot : IChessBot
                 // Must have come up with a move to return, otherwise keep going until one is found
                 TTEntry entry = TTRetrieve();
                 if (entry.IsValid && entry.BestMove != Move.NullMove)
+                {
+                    Console.WriteLine("Hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " +
+                        entry.Score + " centipawns.");
                     return entry.BestMove;
+                }
             }
         }
     }
@@ -150,6 +153,7 @@ public class MyBot : IChessBot
             i++;
         }
 
+        // Transposition table insertion
         if (bestEval <= alpha)
             TTInsert(bestMove, bestEval, depth, 1);
         else
@@ -220,7 +224,7 @@ public class MyBot : IChessBot
             case PieceType.King:
                 return 0;
             default:
-                return 10 * (int)victim + (5 - (int)attacker);
+                return 10 * (int)victim - (int)attacker;
         }
     }
 
@@ -244,7 +248,7 @@ public class MyBot : IChessBot
         { 63872833708024320, 69491333898698752, 8692760404692736,  11496515055522836 },
         { 63884885386256901, 69502350490469883, 5889005753862902,  8703755520970496 },
         { 63636395758376965, 63635334969551882, 21474836490,       1516 },
-        { 58006849062751744, 63647386663573504, 63625396431020544, 63614422789579264 },
+        { 58006849062751744, 63647386663573504, 63625396431020544, 63614422789579264 }
     };
 
     public int GetSquareBonus(PieceType type, bool isWhite, int file, int rank)
@@ -269,8 +273,6 @@ public class MyBot : IChessBot
         return isWhite ? unpackedData : -unpackedData;
     }
 
-    // => instead of return { }
-    // because it saves one token
     private int Evaluate()
     {
         int score = 0;
@@ -281,10 +283,8 @@ public class MyBot : IChessBot
 
             // Placement evaluation
             foreach (Piece piece in list)
-            {
-                // Leave out multiplier since it's worked in already in the GetSquareBonus method
+                // Leave out multiplier for white and black since it's worked in already in the GetSquareBonus method
                 score += GetSquareBonus(piece.PieceType, piece.IsWhite, piece.Square.File, piece.Square.Rank);
-            }
         }
         return currentBoard.IsWhiteToMove ? score : -score;
     }
@@ -295,15 +295,15 @@ public class MyBot : IChessBot
 
     // 340000 represents the rough number of entries it would take to fill 256mb
     // Very lowballed to make sure I don't go over
-    private readonly TTEntry[] transpositionTable = new TTEntry[340000];
+    private readonly TTEntry[] transpositionTable = new TTEntry[0x400000];
 
     private TTEntry TTRetrieve()
-        => transpositionTable[currentBoard.ZobristKey % 340000];
+        => transpositionTable[currentBoard.ZobristKey & 0x3FFFFF];
 
     private void TTInsert(Move bestMove, int score, int depth, sbyte flag)
     {
-        if (depth > 1)
-            transpositionTable[currentBoard.ZobristKey % 340000] = new TTEntry(
+        if (depth > 1 && depth > TTRetrieve().Depth)
+            transpositionTable[currentBoard.ZobristKey & 0x3FFFFF] = new TTEntry(
                 currentBoard.ZobristKey, 
                 bestMove, 
                 score, 
@@ -315,8 +315,8 @@ public class MyBot : IChessBot
     // public enum Flag
     // {
     //     0 = Exact,
-    //     1 = Lowerbound,
-    //     2 = Upperbound
+    //    -1 = Lowerbound,
+    //     1 = Upperbound
     // }
     public record struct TTEntry(ulong Hash, Move BestMove, int Score, int Depth, sbyte Flag)
     {

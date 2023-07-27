@@ -95,7 +95,7 @@ namespace Chess_Challenge.src.My_Bot
         };
 
         private sbyte[,] kingHuntScores =
-{
+        {
             { 0, 0, 0, 0},
             { 0, 0, 0, 0},
             { 0, 0, 0, 0},
@@ -146,11 +146,7 @@ namespace Chess_Challenge.src.My_Bot
                         Console.Write(", ");
                 }
                 Console.WriteLine(" }, ");
-
-
             }
         }
     }
 }
-
-// Console.WriteLine("{{0x{0,16:X}, 0x{1,16:X}, 0x{2,16:X}, 0x{3,16:X}}},", packedData[rank, 0], packedData[rank, 1], packedData[rank, 2], packedData[rank, 3]);
