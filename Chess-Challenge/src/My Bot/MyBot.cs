@@ -4,6 +4,7 @@ using System.Linq;
 
 // TODO: MOST IMPORTANT: Fix full piece square tables acting strange (probably a packing issue?)
 // TODO: Fine tune quiescence search depth for maximum improvements
+// TODO: Better time management
 // TODO: History heuristic
 // TODO: Late move reductions
 // TODO: Passed pawn evaluation
@@ -32,7 +33,7 @@ public class MyBot : IChessBot
         currentBoard = board;
 
         // 1/16th of our remaining time, split among all of the moves
-        searchMaxTime = timer.MillisecondsRemaining / 16;
+        searchMaxTime = timer.MillisecondsRemaining / 20;
         searchTimer = timer;
 
         // Progressively increase search depth, starting from 2
@@ -42,10 +43,13 @@ public class MyBot : IChessBot
 
             PVS(depth, -9999999, 9999999);
 
-            // Must have come up with a move to return, otherwise keep going until one is found
-            Move bestMove = TTRetrieve().BestMove;
-            if (OutOfTime && bestMove != Move.NullMove)
-                return bestMove;
+            if (OutOfTime)
+            {
+                // Must have come up with a move to return, otherwise keep going until one is found
+                TTEntry entry = TTRetrieve();
+                if (entry.IsValid && entry.BestMove != Move.NullMove)
+                    return entry.BestMove;
+            }
         }
     }
 
@@ -127,9 +131,6 @@ public class MyBot : IChessBot
 
             currentBoard.UndoMove(move);
 
-            if (OutOfTime)
-                return 0;
-
             if (eval > bestEval)
             {
                 // Beta cutoff
@@ -181,9 +182,6 @@ public class MyBot : IChessBot
             currentBoard.MakeMove(move);
             int eval = -QuiescenceSearch(depth - 1, -beta, -alpha);
             currentBoard.UndoMove(move);
-
-            if (OutOfTime)
-                return 0;
 
             bestValue = Math.Max(bestValue, eval);
             alpha = Math.Max(alpha, bestValue);

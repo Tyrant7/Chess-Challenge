@@ -25,8 +25,8 @@ namespace ChessChallenge.Example
             int bestScore = -10000000;
             Move bestMove = moves[0];
 
-            // One fifteenth of our remaining time, split among all of the moves
-            searchMaxTime = timer.MillisecondsRemaining / 15;
+            // 1/16th of our remaining time, split among all of the moves
+            searchMaxTime = timer.MillisecondsRemaining / 20;
             searchTimer = timer;
 
             // No max depth, keep going until time limit is reached
