@@ -1,5 +1,8 @@
-﻿using ChessChallenge.API;
+﻿using Chess_Challenge.src.My_Bot;
+using ChessChallenge.API;
 using System;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Linq;
 
 // TODO: MOST IMPORTANT: Fix full piece square tables acting strange (probably a packing issue?)
@@ -234,14 +237,14 @@ public class MyBot : IChessBot
 
     // Big table packed with data from premade piece square tables
     private readonly ulong[,] PackedEvaluationTables = {
-        {0xFFCDE1EBFFEBCE00, 0xFFD7D7F5FFF5D800, 0xFFE1D7F5FFF5E200, 0xFFEBCDFAFFF5E200},
-        {0xFFE1E1F604F5D832, 0xFFEBD80009FFEC32, 0xFFF5D8000A000032, 0xFFFFCE000A000032},
-        {0xFFE1E1F5FAF5E20A, 0xFFF5D8000000000A, 0x0013D80500050A14, 0x001DCE05000A0F1E},
-        {0xFFE1E1FAFAF5E205, 0xFFF5D80000050505, 0x001DD80500050F0A, 0x0027CE05000A1419},
-        {0xFFE1EBFFFAF5E200, 0xFFF5E20000000000, 0x001DE205000A0F00, 0x0027D805000A1414},
-        {0xFFE1F5F5FAF5E205, 0xFFF5EC05000A04FB, 0x0013EC05000A09F6, 0x001DEC05000A0F00},
-        {0xFFE213F5FAF5D805, 0xFFE214000004EC0A, 0x000000050000000A, 0x00000000000004EC},
-        {0xFFCE13EBFFEBCE00, 0xFFE21DF5FFF5D800, 0xFFE209F5FFF5E200, 0xFFE1FFFAFFF5E200}
+        { 58233348458073600, 61037146059233280, 63851895826342400, 66655671952007680 },
+        { 63862891026503730, 66665589183147058, 69480338950193202, 226499563094066 },
+        { 63862895153701386, 69480338782421002, 5867015520979476,  8670770172137246 },
+        { 63862916628537861, 69480338782749957, 8681765288087306,  11485519939245081 },
+        { 63872833708024320, 69491333898698752, 8692760404692736,  11496515055522836 },
+        { 63884885386256901, 69502350490469883, 5889005753862902,  8703755520970496 },
+        { 63636395758376965, 63635334969551882, 21474836490,       1516 },
+        { 58006849062751744, 63647386663573504, 63625396431020544, 63614422789579264 },
     };
 
     public int GetSquareBonus(PieceType type, bool isWhite, int file, int rank)
@@ -254,12 +257,13 @@ public class MyBot : IChessBot
         if (isWhite)
             rank = 7 - rank;
 
-        ulong bytemask = 0xFF;
+        // First, shift the data so that the correct byte is sitting in the least significant position
+        // Then, mask it out
+        sbyte unpackedData = (sbyte)((PackedEvaluationTables[rank, file] >> 8 * ((int)type - 1)) & 0xFF);
 
-        // First shift the mask to select the correct byte
-        // Then bitwise-and it with the packed scores
-        // Finally, un-shift the resulting data to properly convert back
-        int unpackedData = (sbyte)((PackedEvaluationTables[rank, file] & (bytemask << (int)type)) >> (int)type);
+        // Merge the sign back into the original unpacked data
+        // by first bitwise-ANDing it in with a sign mask, and then ORing it back into the unpacked data
+        unpackedData = (sbyte)((byte)unpackedData | (0b10000000 & unpackedData));
 
         // Invert eval scores for black pieces
         return isWhite ? unpackedData : -unpackedData;

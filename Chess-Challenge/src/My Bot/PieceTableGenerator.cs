@@ -112,15 +112,17 @@ namespace Chess_Challenge.src.My_Bot
         {
             //Add boards from "index" 0 upwards. Here, the pawn board is "index" 0.
             //That means it will occupy the least significant byte in the packed data.
-            List<sbyte[,]> allScores = new();
-            allScores.Add(pawnScores);
-            allScores.Add(knightScores);
-            allScores.Add(bishopScores);
-            allScores.Add(rookScores);
-            allScores.Add(queenScores);
-            allScores.Add(kingMiddlegameScores);
-            allScores.Add(kingEndgameScores);
-            allScores.Add(kingHuntScores);
+            List<sbyte[,]> allScores = new()
+            {
+                pawnScores,
+                knightScores,
+                bishopScores,
+                rookScores,
+                queenScores,
+                kingMiddlegameScores,
+                kingEndgameScores,
+                kingHuntScores
+            };
 
             ulong[,] packedData = new ulong[8, 4];
             for (int rank = 0; rank < 8; rank++)
@@ -129,14 +131,26 @@ namespace Chess_Challenge.src.My_Bot
                 {
                     for (int set = 0; set < 8; set++)
                     {
-                        //This is slightly inefficient but you only need to run this code once so it's fine
                         sbyte[,] thisSet = allScores[set];
-                        //You could argue this should be |= but either operator works since no two digits overlap.
-                        packedData[rank, file] += ((ulong)thisSet[rank, file]) << (8 * set);
+
+                        // Pack the byte into the ulong array
+                        packedData[rank, file] |= (ulong)(thisSet[rank, file] & 0xFF) << (8 * set);
                     }
                 }
-                Console.WriteLine("{{0x{0,16:X}, 0x{1,16:X}, 0x{2,16:X}, 0x{3,16:X}}},", packedData[rank, 0], packedData[rank, 1], packedData[rank, 2], packedData[rank, 3]);
+
+                Console.Write("{ ");
+                for (int i = 0; i < 4; i++)
+                {
+                    Console.Write(packedData[rank, i]);
+                    if (i < 3)
+                        Console.Write(", ");
+                }
+                Console.WriteLine(" }, ");
+
+
             }
         }
     }
 }
+
+// Console.WriteLine("{{0x{0,16:X}, 0x{1,16:X}, 0x{2,16:X}, 0x{3,16:X}}},", packedData[rank, 0], packedData[rank, 1], packedData[rank, 2], packedData[rank, 3]);
