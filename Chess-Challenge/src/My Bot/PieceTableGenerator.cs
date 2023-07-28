@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -110,8 +111,8 @@ namespace Chess_Challenge.src.My_Bot
         // Use to print the packed array to the console, then clean up and paste directly into your code.
         public PieceTableGenerator()
         {
-            //Add boards from "index" 0 upwards. Here, the pawn board is "index" 0.
-            //That means it will occupy the least significant byte in the packed data.
+            // Add boards from "index" 0 upwards. Here, the pawn board is "index" 0.
+            // That means it will occupy the least significant byte in the packed data.
             List<sbyte[,]> allScores = new()
             {
                 pawnScores,

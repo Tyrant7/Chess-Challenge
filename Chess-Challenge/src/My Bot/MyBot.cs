@@ -2,9 +2,7 @@
 using System;
 using System.Linq;
 
-// TODO: MOST IMPORTANT: Experiment with different draw speeds using isDraw vs other combinations of draw conditions
 // TODO: MOST IMPORTANT: Implement endgame tables
-// TODO: MOST IMPORTANT: Better time management
 // TODO: MOST IMPORTANT: Experiment with removing internal iterative deepening
 // TODO: MOST IMPORTANT: Remove Quiescence search depth for maximum improvements and use ply to calculate faster mates
 // TODO: History heuristic
@@ -41,7 +39,7 @@ public class MyBot : IChessBot
         // Progressively increase search depth, starting from 2
         for (int depth = 2; ; depth++)
         {
-            // Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms");
+            Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms");
 
             PVS(depth, -9999999, 9999999);
 
@@ -80,7 +78,7 @@ public class MyBot : IChessBot
         TTEntry entry = TTRetrieve();
 
         // No entry for this position
-        if (entry.Hash != board.ZobristKey || entry == TTEntry.Invalid)
+        if (entry.Hash != board.ZobristKey || entry.Flag == 0)
         {
             // Internal iterative deepening
             PVS(depth - 2, alpha, beta);
@@ -94,13 +92,13 @@ public class MyBot : IChessBot
             switch (entry.Flag)
             {
                 // Exact
-                case 0:
+                case 1:
                     return entry.Score;
                 // Lowerbound
                 case -1:
                     alpha = Math.Max(alpha, entry.Score);
                     break;
-                // Default case for upperbound (1) to save a token
+                // Default case for upperbound (2) to save a token
                 default:
                     beta = Math.Min(beta, entry.Score);
                     break;
@@ -155,9 +153,9 @@ public class MyBot : IChessBot
 
         // Transposition table insertion
         if (bestEval <= alpha)
-            TTInsert(bestMove, bestEval, depth, 1);
+            TTInsert(bestMove, bestEval, depth, 2);
         else
-            TTInsert(bestMove, bestEval, depth, 0);
+            TTInsert(bestMove, bestEval, depth, 1);
 
         return alpha;
     }
@@ -289,7 +287,7 @@ public class MyBot : IChessBot
     // Transposition table
     //
 
-    // 340000 represents the rough number of entries it would take to fill 256mb
+    // 0x400000 represents the rough number of entries it would take to fill 256mb
     // Very lowballed to make sure I don't go over
     private readonly TTEntry[] transpositionTable = new TTEntry[0x400000];
 
@@ -310,13 +308,10 @@ public class MyBot : IChessBot
 
     // public enum Flag
     // {
-    //     0 = Exact,
+    //     0 = Invalid,
+    //     1 = Exact
     //    -1 = Lowerbound,
-    //     1 = Upperbound
+    //     2 = Upperbound
     // }
-    public record struct TTEntry(ulong Hash, Move BestMove, int Score, int Depth, sbyte Flag)
-    {
-        public readonly bool IsValid => Depth > 0;
-        public static TTEntry Invalid => new(0, Move.NullMove, 0, -1, 0);
-    }
+    public record struct TTEntry(ulong Hash, Move BestMove, int Score, int Depth, sbyte Flag);
 }
