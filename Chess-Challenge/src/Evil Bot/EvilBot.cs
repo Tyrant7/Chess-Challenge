@@ -8,12 +8,26 @@ namespace ChessChallenge.Example
 {
     public class EvilBot : IChessBot
     {
+
+        // TODO: MOST IMPORTANT: Implement endgame tables
+        // TODO: MOST IMPORTANT: Remove Quiescence search depth for maximum improvements and use ply to calculate faster mates
+        // TODO: History heuristic
+        // TODO: Late move reductions
+        // TODO: Passed pawn evaluation
+        // TODO: Null move pruning
+        // TODO: King safety
+        // TODO: Check and promotion extensions
+
         // None, Pawn, Knight, Bishop, Rook, Queen, King 
         private readonly int[] PieceValues = { 0, 100, 320, 320, 500, 900, 0 };
 
         private int searchMaxTime;
         private Timer searchTimer;
-        private bool OutOfTime => searchTimer.MillisecondsElapsedThisTurn > searchMaxTime;
+
+        // Return true if out of time AND a valid move has been found
+        private bool OutOfTime => searchTimer.MillisecondsElapsedThisTurn > searchMaxTime &&
+                                  TTRetrieve().Hash == board.ZobristKey &&
+                                  TTRetrieve().BestMove != Move.NullMove;
 
         Board board;
 
@@ -33,16 +47,15 @@ namespace ChessChallenge.Example
             // Progressively increase search depth, starting from 2
             for (int depth = 2; ; depth++)
             {
+                Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms");
+
                 PVS(depth, -9999999, 9999999);
 
                 if (OutOfTime)
                 {
-                    // Must have come up with a move to return, otherwise keep going until one is found
-                    TTEntry entry = TTRetrieve();
-                    if (entry.Hash == board.ZobristKey && entry.BestMove != Move.NullMove)
-                    {
-                        return entry.BestMove;
-                    }
+                    Console.WriteLine("Hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " +
+                        TTRetrieve().Score + " centipawns.");
+                    return TTRetrieve().BestMove;
                 }
             }
         }
@@ -60,8 +73,7 @@ namespace ChessChallenge.Example
 
             // Terminal node, calculate score
             if (depth <= 0)
-                // Do a Quiescence Search with a depth of 3, which will return a score from white's perspective
-                // Multiple that score by -1 for black
+                // Do a Quiescence Search
                 return QuiescenceSearch(2, alpha, beta);
 
             // Transposition table lookup
@@ -116,6 +128,9 @@ namespace ChessChallenge.Example
 
                 board.UndoMove(move);
 
+                if (OutOfTime)
+                    return 0;
+
                 if (eval > bestEval)
                 {
                     // Beta cutoff
@@ -145,6 +160,9 @@ namespace ChessChallenge.Example
         // https://stackoverflow.com/questions/48846642/is-there-something-wrong-with-my-quiescence-search
         private int QuiescenceSearch(int depth, int alpha, int beta)
         {
+            if (OutOfTime)
+                return 0;
+
             // Evaluate the gamestate
             if (board.IsDraw())
                 // Discourage draws slightly, unless losing
@@ -296,4 +314,5 @@ namespace ChessChallenge.Example
         // }
         private record struct TTEntry(ulong Hash, Move BestMove, int Score, int Depth, sbyte Flag);
     }
+
 }

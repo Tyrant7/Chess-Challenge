@@ -3,12 +3,12 @@ using System;
 using System.Linq;
 
 // TODO: MOST IMPORTANT: Implement endgame tables
-// TODO: MOST IMPORTANT: Remove Quiescence search depth for maximum improvements and use ply to calculate faster mates
+// TODO: MOST IMPORTANT: Remove Quiescence unused depth parameter for maximum improvements and use ply to calculate faster mates
+// TODO: Killer moves
 // TODO: History heuristic
 // TODO: Late move reductions
 // TODO: Passed pawn evaluation
 // TODO: Null move pruning
-// TODO: King safety
 // TODO: Check and promotion extensions
 
 public class MyBot : IChessBot
@@ -42,16 +42,20 @@ public class MyBot : IChessBot
         // Progressively increase search depth, starting from 2
         for (int depth = 2; ; depth++)
         {
-            Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms");
+            // Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms");
 
             PVS(depth, -9999999, 9999999);
 
+            /*
             if (OutOfTime)
             {
                 Console.WriteLine("Hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " +
                     TTRetrieve().Score + " centipawns.");
                 return TTRetrieve().BestMove;
             }
+            */
+            if (OutOfTime)
+                return TTRetrieve().BestMove;
         }
     }
 
@@ -59,7 +63,7 @@ public class MyBot : IChessBot
     {
         // Evaluate the gamestate
         if (board.IsDraw())
-            // Discourage draws slightly, unless losing
+            // Discourage draws slightly
             return -15;
         if (board.IsInCheckmate())
             // Checkmate = 99999
@@ -111,7 +115,7 @@ public class MyBot : IChessBot
             // Always fully search the first child
             if (i == 0)
                 eval = -PVS(depth - 1, -beta, -alpha);
-            else
+            else 
             {
                 // Search with a null window
                 eval = -PVS(depth - 1, -alpha - 1, -alpha);
@@ -160,7 +164,7 @@ public class MyBot : IChessBot
 
         // Evaluate the gamestate
         if (board.IsDraw())
-            // Discourage draws slightly, unless losing
+            // Discourage draws slightly
             return -15;
         if (board.IsInCheckmate())
             // Checkmate = 99999
@@ -231,6 +235,8 @@ public class MyBot : IChessBot
     // Evaluation
     //
 
+    #region Evaluation
+
     // Big table packed with data from premade piece square tables
     private readonly ulong[,] PackedEvaluationTables = {
         { 58233348458073600, 61037146059233280, 63851895826342400, 66655671952007680 },
@@ -277,9 +283,9 @@ public class MyBot : IChessBot
         return board.IsWhiteToMove ? score : -score;
     }
 
-    //
-    // Transposition table
-    //
+    #endregion
+
+    #region Transposition Table
 
     // 0x400000 represents the rough number of entries it would take to fill 256mb
     // Very lowballed to make sure I don't go over
@@ -308,4 +314,6 @@ public class MyBot : IChessBot
     //     2 = Upperbound
     // }
     private record struct TTEntry(ulong Hash, Move BestMove, int Score, int Depth, sbyte Flag);
+
+    #endregion
 }
