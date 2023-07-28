@@ -33,8 +33,6 @@ namespace ChessChallenge.Example
             // Progressively increase search depth, starting from 2
             for (int depth = 2; ; depth++)
             {
-                Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms");
-
                 PVS(depth, -9999999, 9999999);
 
                 if (OutOfTime)
@@ -43,8 +41,6 @@ namespace ChessChallenge.Example
                     TTEntry entry = TTRetrieve();
                     if (entry.Hash == board.ZobristKey && entry.BestMove != Move.NullMove)
                     {
-                        Console.WriteLine("Hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " +
-                            entry.Score + " centipawns.");
                         return entry.BestMove;
                     }
                 }
@@ -71,17 +67,8 @@ namespace ChessChallenge.Example
             // Transposition table lookup
             TTEntry entry = TTRetrieve();
 
-            // No entry for this position
-            if (entry.Hash != board.ZobristKey || entry.Flag == 0)
-            {
-                // Internal iterative deepening
-                PVS(depth - 2, alpha, beta);
-
-                // Retrieve the new best move found with internal iterative deepening
-                entry = TTRetrieve();
-            }
             // Found a valid entry for this position
-            else if (entry.Depth >= depth)
+            if (entry.Hash == board.ZobristKey && entry.Depth >= depth)
             {
                 switch (entry.Flag)
                 {
@@ -243,7 +230,7 @@ namespace ChessChallenge.Example
         { 58006849062751744, 63647386663573504, 63625396431020544, 63614422789579264 }
     };
 
-        public int GetSquareBonus(PieceType type, bool isWhite, int file, int rank)
+        private int GetSquareBonus(PieceType type, bool isWhite, int file, int rank)
         {
             // Because arrays are only 4 squares wide, mirror across files
             if (file > 3)
@@ -307,6 +294,6 @@ namespace ChessChallenge.Example
         //    -1 = Lowerbound,
         //     2 = Upperbound
         // }
-        public record struct TTEntry(ulong Hash, Move BestMove, int Score, int Depth, sbyte Flag);
+        private record struct TTEntry(ulong Hash, Move BestMove, int Score, int Depth, sbyte Flag);
     }
 }

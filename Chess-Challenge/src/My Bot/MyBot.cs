@@ -3,7 +3,6 @@ using System;
 using System.Linq;
 
 // TODO: MOST IMPORTANT: Implement endgame tables
-// TODO: MOST IMPORTANT: Experiment with removing internal iterative deepening
 // TODO: MOST IMPORTANT: Remove Quiescence search depth for maximum improvements and use ply to calculate faster mates
 // TODO: History heuristic
 // TODO: Late move reductions
@@ -19,7 +18,11 @@ public class MyBot : IChessBot
 
     private int searchMaxTime;
     private Timer searchTimer;
-    private bool OutOfTime => searchTimer.MillisecondsElapsedThisTurn > searchMaxTime;
+
+    // Return true if out of time AND a valid move has been found
+    private bool OutOfTime => searchTimer.MillisecondsElapsedThisTurn > searchMaxTime &&
+                              TTRetrieve().Hash == board.ZobristKey && 
+                              TTRetrieve().BestMove != Move.NullMove;
 
     Board board;
 
@@ -45,14 +48,9 @@ public class MyBot : IChessBot
 
             if (OutOfTime)
             {
-                // Must have come up with a move to return, otherwise keep going until one is found
-                TTEntry entry = TTRetrieve();
-                if (entry.Hash == board.ZobristKey && entry.BestMove != Move.NullMove)
-                {
-                    Console.WriteLine("Hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " +
-                        entry.Score + " centipawns.");
-                    return entry.BestMove;
-                }
+                Console.WriteLine("Hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " +
+                    TTRetrieve().Score + " centipawns.");
+                return TTRetrieve().BestMove;
             }
         }
     }
@@ -70,8 +68,7 @@ public class MyBot : IChessBot
 
         // Terminal node, calculate score
         if (depth <= 0)
-            // Do a Quiescence Search with a depth of 3, which will return a score from white's perspective
-            // Multiple that score by -1 for black
+            // Do a Quiescence Search
             return QuiescenceSearch(2, alpha, beta);
 
         // Transposition table lookup
@@ -126,6 +123,9 @@ public class MyBot : IChessBot
 
             board.UndoMove(move);
 
+            if (OutOfTime)
+                return 0;
+
             if (eval > bestEval)
             {
                 // Beta cutoff
@@ -155,6 +155,9 @@ public class MyBot : IChessBot
     // https://stackoverflow.com/questions/48846642/is-there-something-wrong-with-my-quiescence-search
     private int QuiescenceSearch(int depth, int alpha, int beta)
     {
+        if (OutOfTime)
+            return 0;
+
         // Evaluate the gamestate
         if (board.IsDraw())
             // Discourage draws slightly, unless losing
@@ -240,7 +243,7 @@ public class MyBot : IChessBot
         { 58006849062751744, 63647386663573504, 63625396431020544, 63614422789579264 }
     };
 
-    public int GetSquareBonus(PieceType type, bool isWhite, int file, int rank)
+    private int GetSquareBonus(PieceType type, bool isWhite, int file, int rank)
     {
         // Because arrays are only 4 squares wide, mirror across files
         if (file > 3)
@@ -304,5 +307,5 @@ public class MyBot : IChessBot
     //    -1 = Lowerbound,
     //     2 = Upperbound
     // }
-    public record struct TTEntry(ulong Hash, Move BestMove, int Score, int Depth, sbyte Flag);
+    private record struct TTEntry(ulong Hash, Move BestMove, int Score, int Depth, sbyte Flag);
 }
