@@ -77,17 +77,8 @@ public class MyBot : IChessBot
         // Transposition table lookup
         TTEntry entry = TTRetrieve();
 
-        // No entry for this position
-        if (entry.Hash != board.ZobristKey || entry.Flag == 0)
-        {
-            // Internal iterative deepening
-            PVS(depth - 2, alpha, beta);
-
-            // Retrieve the new best move found with internal iterative deepening
-            entry = TTRetrieve();
-        }
         // Found a valid entry for this position
-        else if (entry.Depth >= depth)
+        if (entry.Hash == board.ZobristKey && entry.Depth >= depth)
         {
             switch (entry.Flag)
             {
