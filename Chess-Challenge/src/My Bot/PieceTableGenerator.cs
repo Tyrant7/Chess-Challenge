@@ -162,7 +162,7 @@ public class PieceTableGenerator
         };
 
         Console.WriteLine("Packed table:\n");
-        ulong[][] packedData = PackData(table);
+        ulong[] packedData = PackData(table);
 
         Console.WriteLine("Unpacked table:\n");
         UnpackData(packedData);
@@ -173,18 +173,16 @@ public class PieceTableGenerator
     private const int tableHeight = 8;
 
     // Packs data in the following form
-    // ulong[set][rank] = file
-    private static ulong[][] PackData(List<int[]> tablesToPack)
+    // ulong[(set * tableSize) + (tableHeight * rank)] = file
+    private static ulong[] PackData(List<int[]> tablesToPack)
     {
-        ulong[][] packedData = new ulong[tablesToPack.Count][];
+        ulong[] packedData = new ulong[tablesToPack.Count * tableSize];
 
         Console.WriteLine("{ ");
         for (int set = 0; set < tablesToPack.Count; set++)
         {
-            packedData[set] = new ulong[tableSize];
             int[] setToPack = tablesToPack[set];
 
-            Console.Write("{ ");
             for (int rank = 0; rank < tableHeight; rank++)
             {
                 ulong packedRank = 0;
@@ -194,18 +192,17 @@ public class PieceTableGenerator
                     packedRank |= (ulong)(valueToPack & 0xFF) << file * 8;
                 }
 
-                packedData[set][rank] = packedRank;
+                packedData[(set * tableSize) + (tableHeight * rank)] = packedRank;
                 Console.Write(packedRank + ", ");
             }
-
-            Console.WriteLine(" }, ");
+            Console.WriteLine();
         }
         Console.WriteLine("};");
 
         return packedData;
     }
 
-    private static void UnpackData(ulong[][] tablesToUnpack)
+    private static void UnpackData(ulong[] tablesToUnpack)
     {
         // Print tables to middlegame scores
         for (int type = 0; type < 7; type++)
@@ -215,21 +212,21 @@ public class PieceTableGenerator
             {
                 for (int file = 0; file < tableWidth; file++)
                 {
-                    Console.Write(GetSquareBonus(tablesToUnpack[type], true, file, rank) + ", ");
+                    Console.Write(GetSquareBonus(tablesToUnpack, type, true, file, rank) + ", ");
                 }
                 Console.WriteLine();
             }
         }
     }
 
-    private static int GetSquareBonus(ulong[] tableToUnpack, bool isWhite, int file, int rank)
+    private static int GetSquareBonus(ulong[] tables, int type, bool isWhite, int file, int rank)
     {
         // Mirror vertically for white pieces, since piece arrays are flipped vertically
         if (isWhite)
             rank = 7 - rank;
 
         // Grab the correct byte representing the value
-        sbyte squareValue = unchecked((sbyte)((tableToUnpack[rank] >> file * 8) & 0xFF));
+        sbyte squareValue = unchecked((sbyte)((tables[(type * tableSize) + (tableHeight * rank)] >> file * 8) & 0xFF));
 
         // And multiply it by the reduction to get our original value again
         int value = (int)Math.Round(squareValue * 1.461);
