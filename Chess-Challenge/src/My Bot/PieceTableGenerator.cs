@@ -173,12 +173,11 @@ public class PieceTableGenerator
     private const int tableHeight = 8;
 
     // Packs data in the following form
-    // ulong[(set * tableSize) + (tableHeight * rank)] = file
+    // ulong[(set * tableWidth) + rank] = file
     private static ulong[] PackData(List<int[]> tablesToPack)
     {
-        ulong[] packedData = new ulong[tablesToPack.Count * tableSize];
+        ulong[] packedData = new ulong[tablesToPack.Count * tableWidth];
 
-        Console.WriteLine("{ ");
         for (int set = 0; set < tablesToPack.Count; set++)
         {
             int[] setToPack = tablesToPack[set];
@@ -188,12 +187,19 @@ public class PieceTableGenerator
                 ulong packedRank = 0;
                 for (int file = 0; file < tableWidth; file++)
                 {
-                    sbyte valueToPack = (sbyte)Math.Round(setToPack[((tableHeight - 1 - rank) * tableWidth) + file] / 1.461);
+                    sbyte valueToPack = (sbyte)Math.Round(setToPack[(rank * tableWidth) + file] / 1.461);
                     packedRank |= (ulong)(valueToPack & 0xFF) << file * 8;
                 }
+                packedData[(set * tableWidth) + rank] = packedRank;
+            }
+        }
 
-                packedData[(set * tableSize) + (tableHeight * rank)] = packedRank;
-                Console.Write(packedRank + ", ");
+        Console.WriteLine("{ ");
+        for (int set = 0; set < tablesToPack.Count; set++)
+        {
+            for (int rank = 0; rank < tableHeight; rank++)
+            {
+                Console.Write(packedData[(set * tableWidth) + rank] + ", ");
             }
             Console.WriteLine();
         }
@@ -204,6 +210,8 @@ public class PieceTableGenerator
 
     private static void UnpackData(ulong[] tablesToUnpack)
     {
+        Console.WriteLine("Count: " + tablesToUnpack.Length);
+
         // Print tables to middlegame scores
         for (int type = 0; type < 7; type++)
         {
@@ -226,9 +234,9 @@ public class PieceTableGenerator
             rank = 7 - rank;
 
         // Grab the correct byte representing the value
-        sbyte squareValue = unchecked((sbyte)((tables[(type * tableSize) + (tableHeight * rank)] >> file * 8) & 0xFF));
+        sbyte squareValue = unchecked((sbyte)((tables[(type * tableWidth) + rank] >> file * 8) & 0xFF));
 
-        // And multiply it by the reduction to get our original value again
+        // And multiply it by the reduction factor to get our original value again
         int value = (int)Math.Round(squareValue * 1.461);
 
         // Invert eval scores for black pieces
