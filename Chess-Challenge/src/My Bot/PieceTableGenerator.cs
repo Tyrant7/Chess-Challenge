@@ -222,14 +222,14 @@ public class PieceTableGenerator
         packedData[tableSize + 1] = new(packedBuffer);
 
         // Print the newly created table
-        Console.WriteLine("{ ");
+        Console.Write("{ ");
         for (int square = 0; square < tableSize + 2; square++)
         {
-            if (square == tableSize)
+            if (square % 8 == 0)
                 Console.WriteLine();
-            Console.Write(packedData[square] + ", ");
+            Console.Write(packedData[square] + "m, ");
         }
-        Console.WriteLine("};");
+        Console.WriteLine("\n};");
 
         return packedData;
     }
@@ -239,18 +239,18 @@ public class PieceTableGenerator
     private static int[][] UnpackData(decimal[] tablesToUnpack)
     {
         var pestoUnpacked = new int[tableSize][];
-        var pieceValues = new int[12];
+        var pieceValues = new short[12];
 
         void Copy(int i) => Buffer.BlockCopy(decimal.GetBits(tablesToUnpack[tableSize + i]), 0, pieceValues, i * 12, 12);
         Copy(0);
-        Copy(1);        
+        Copy(1);
 
         for (int i = 0; i < tableSize; i++)
         {
             int pieceType = 0;
             pestoUnpacked[i] = decimal.GetBits(tablesToUnpack[i]).Take(3)
                 .SelectMany(c => BitConverter.GetBytes(c)
-                    .Select((byte square) => (int)Math.Round((sbyte)square * 1.461) + PieceValues[pieceType++]))
+                    .Select((byte square) => (int)Math.Round((sbyte)square * 1.461) + pieceValues[pieceType++]))
                 .ToArray();
         }
 
