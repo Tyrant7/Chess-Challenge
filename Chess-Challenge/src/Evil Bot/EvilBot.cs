@@ -316,3 +316,4 @@ namespace ChessChallenge.Example
 
         #endregion
     }
+}
