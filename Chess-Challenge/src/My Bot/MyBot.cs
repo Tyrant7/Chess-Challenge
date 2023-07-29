@@ -23,6 +23,11 @@ public class MyBot : IChessBot
 
     Board board;
 
+    public MyBot()
+    {
+        PieceTableGenerator.Generate();
+    }
+
     //
     // Search
     //

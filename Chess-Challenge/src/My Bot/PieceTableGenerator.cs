@@ -1,5 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Linq;
+using ChessChallenge.API;
+using System.Data;
+using ChessChallenge.Chess;
+using Microsoft.CodeAnalysis.CSharp;
 
 public class PieceTableGenerator
 {
@@ -141,6 +147,9 @@ public class PieceTableGenerator
     -53, -34, -21, -11, -28, -14, -24, -43
     };
 
+    // None, Pawn, Knight, Bishop, Rook, Queen, King 
+    private static readonly short[] PieceValues = { 82, 337, 365, 477, 1025, 0, // Middlegame
+                                                    94, 281, 297, 512, 936, 0}; // Endgame
 
     public static void Generate()
     {
@@ -162,83 +171,124 @@ public class PieceTableGenerator
         };
 
         Console.WriteLine("Packed table:\n");
-        ulong[] packedData = PackData(table);
+        decimal[] packedData = PackData(table);
+
+        Console.Write(packedData);
 
         Console.WriteLine("Unpacked table:\n");
-        UnpackData(packedData);
+        int[][] unpackedData = UnpackData(packedData);
+
+        PrintUnpackedData(unpackedData);
     }
 
-    private const int tableWidth = 8;
-    private const int tableHeight = 8;
+    private const int tableSize = 64;
+    private const int tableCount = 12;
 
     // Packs data in the following form
-    // ulong[(set * tableWidth) + rank] = file
-    private static ulong[] PackData(List<int[]> tablesToPack)
+    // The first 64 elements contain square data in the first 12 bytes (1 byte per piece type, 6 per gamephase)
+    // The following 2 elements contain piece values (2 bytes per value, 6 piece types, 2 gamephases)
+    private static decimal[] PackData(List<int[]> tablesToPack)
     {
-        ulong[] packedData = new ulong[tablesToPack.Count * tableWidth];
+        decimal[] packedData = new decimal[tableSize + 2];
 
-        for (int set = 0; set < tablesToPack.Count; set++)
+        for (int square = 0; square < tableSize; square++)
         {
-            int[] setToPack = tablesToPack[set];
-
-            for (int rank = 0; rank < tableHeight; rank++)
+            // Pack all sets for this square into a byte array
+            byte[] packedSquares = new byte[tableCount];
+            for (int set = 0; set < tableCount; set++)
             {
-                ulong packedRank = 0;
-                for (int file = 0; file < tableWidth; file++)
-                {
-                    sbyte valueToPack = (sbyte)Math.Round(setToPack[(rank * tableWidth) + file] / 1.461);
-                    packedRank |= (ulong)(valueToPack & 0xFF) << file * 8;
-                }
-                packedData[(set * tableWidth) + rank] = packedRank;
+                int[] setToPack = tablesToPack[set];
+                sbyte valueToPack = (sbyte)Math.Round(setToPack[square] / 1.461);
+                packedSquares[set] = (byte)(valueToPack & 0xFF);
             }
+
+            // Create a new decimal based on the packed values for this square
+            int[] thirds = new int[4];
+            for (int i = 0; i < 3; i++)
+            {
+                thirds[i] = BitConverter.ToInt32(packedSquares, i * 4);
+            }
+            packedData[square] = new(thirds);
         }
 
+        // Pack the piece values into byte buffers
+        // and place the values in the last 2 slots in the table
+        int[] packedBuffer = new int[4];
+
+        Buffer.BlockCopy(PieceValues, 0, packedBuffer, 0, 12);
+        packedData[tableSize] = new(packedBuffer);
+
+        Buffer.BlockCopy(PieceValues, 12, packedBuffer, 0, 12);
+        packedData[tableSize + 1] = new(packedBuffer);
+
+        // Print the newly created table
         Console.WriteLine("{ ");
-        for (int set = 0; set < tablesToPack.Count; set++)
+        for (int square = 0; square < tableSize + 2; square++)
         {
-            for (int rank = 0; rank < tableHeight; rank++)
-            {
-                Console.Write(packedData[(set * tableWidth) + rank] + ", ");
-            }
-            Console.WriteLine();
+            if (square == tableSize)
+                Console.WriteLine();
+            Console.Write(packedData[square] + ", ");
         }
         Console.WriteLine("};");
 
         return packedData;
     }
 
-    private static void UnpackData(ulong[] tablesToUnpack)
+    // Unpacks a packed square table to be accessed with
+    // pestoUnpacked[square][pieceType]
+    private static int[][] UnpackData(decimal[] tablesToUnpack)
     {
-        Console.WriteLine("Count: " + tablesToUnpack.Length);
+        int[][] pestoUnpacked = new int[tableSize][];
 
-        // Print tables to middlegame scores
-        for (int type = 0; type < 7; type++)
+        short[] mgValues = new short[6];
+        short[] egValues = new short[6];
+        Buffer.BlockCopy(decimal.GetBits(tablesToUnpack[tableSize]), 0, mgValues, 0, 12);
+        Buffer.BlockCopy(decimal.GetBits(tablesToUnpack[tableSize + 1]), 0, egValues, 0, 12);
+
+        List<short> pieceValues = new();
+        pieceValues.AddRange(mgValues);
+        pieceValues.AddRange(egValues);
+
+        for (int i = 0; i < tableSize; i++)
         {
-            Console.WriteLine("\n\nTable for type: " + (ScoreType)type);
-            for (int rank = 0; rank < tableHeight; rank++)
+            List<int> squareValues = new();
+
+            int[] chunks = decimal.GetBits(tablesToUnpack[i]).Take(3).ToArray();
+            foreach (int chunk in chunks)
             {
-                for (int file = 0; file < tableWidth; file++)
+                byte[] bytes = BitConverter.GetBytes(chunk);
+                foreach (sbyte square in bytes)
                 {
-                    Console.Write(GetSquareBonus(tablesToUnpack, type, true, file, rank) + ", ");
+                    // Multiply it by the reduction factor to get our original value again
+                    int value = (int)Math.Round(square * 1.461);
+                    squareValues.Add(value);
                 }
-                Console.WriteLine();
             }
+
+            for (int pieceType = 0; pieceType < tableCount; pieceType++)
+            {
+                squareValues[pieceType] += PieceValues[pieceType];
+            }
+            pestoUnpacked[i] = squareValues.ToArray();
         }
+
+        return pestoUnpacked;
     }
 
-    private static int GetSquareBonus(ulong[] tables, int type, bool isWhite, int file, int rank)
+    private static void PrintUnpackedData(int[][] unpackedData)
     {
-        // Mirror vertically for white pieces, since piece arrays are flipped vertically
-        if (isWhite)
-            rank = 7 - rank;
+        // Print all of the unpacked values
+        for (int type = 0; type < tableCount; type++)
+        {
+            Console.WriteLine("\n\nTable for type: " + (ScoreType)type);
+            for (int square = 0; square < tableSize; square++)
+            {
+                if (square % 8 == 0)
+                    Console.WriteLine();
 
-        // Grab the correct byte representing the value
-        sbyte squareValue = unchecked((sbyte)((tables[(type * tableWidth) + rank] >> file * 8) & 0xFF));
-
-        // And multiply it by the reduction factor to get our original value again
-        int value = (int)Math.Round(squareValue * 1.461);
-
-        // Invert eval scores for black pieces
-        return isWhite ? value : -value;
+                Console.Write(unpackedData[square][type] + ", ");
+            }
+            Console.WriteLine();
+        }
     }
 }
