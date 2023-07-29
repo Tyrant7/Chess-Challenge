@@ -238,38 +238,20 @@ public class PieceTableGenerator
     // pestoUnpacked[square][pieceType]
     private static int[][] UnpackData(decimal[] tablesToUnpack)
     {
-        int[][] pestoUnpacked = new int[tableSize][];
+        var pestoUnpacked = new int[tableSize][];
+        var pieceValues = new int[12];
 
-        short[] mgValues = new short[6];
-        short[] egValues = new short[6];
-        Buffer.BlockCopy(decimal.GetBits(tablesToUnpack[tableSize]), 0, mgValues, 0, 12);
-        Buffer.BlockCopy(decimal.GetBits(tablesToUnpack[tableSize + 1]), 0, egValues, 0, 12);
-
-        List<short> pieceValues = new();
-        pieceValues.AddRange(mgValues);
-        pieceValues.AddRange(egValues);
+        void Copy(int i) => Buffer.BlockCopy(decimal.GetBits(tablesToUnpack[tableSize + i]), 0, pieceValues, i * 12, 12);
+        Copy(0);
+        Copy(1);        
 
         for (int i = 0; i < tableSize; i++)
         {
-            List<int> squareValues = new();
-
-            int[] chunks = decimal.GetBits(tablesToUnpack[i]).Take(3).ToArray();
-            foreach (int chunk in chunks)
-            {
-                byte[] bytes = BitConverter.GetBytes(chunk);
-                foreach (sbyte square in bytes)
-                {
-                    // Multiply it by the reduction factor to get our original value again
-                    int value = (int)Math.Round(square * 1.461);
-                    squareValues.Add(value);
-                }
-            }
-
-            for (int pieceType = 0; pieceType < tableCount; pieceType++)
-            {
-                squareValues[pieceType] += PieceValues[pieceType];
-            }
-            pestoUnpacked[i] = squareValues.ToArray();
+            int pieceType = 0;
+            pestoUnpacked[i] = decimal.GetBits(tablesToUnpack[i]).Take(3)
+                .SelectMany(c => BitConverter.GetBytes(c)
+                    .Select((byte square) => (int)Math.Round((sbyte)square * 1.461) + PieceValues[pieceType++]))
+                .ToArray();
         }
 
         return pestoUnpacked;
