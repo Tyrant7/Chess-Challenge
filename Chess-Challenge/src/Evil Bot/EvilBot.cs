@@ -8,19 +8,6 @@ namespace ChessChallenge.Example
 {
     public class EvilBot : IChessBot
     {
-
-        // TODO: MOST IMPORTANT: Implement endgame tables
-        // TODO: MOST IMPORTANT: Remove Quiescence search depth for maximum improvements and use ply to calculate faster mates
-        // TODO: History heuristic
-        // TODO: Late move reductions
-        // TODO: Passed pawn evaluation
-        // TODO: Null move pruning
-        // TODO: King safety
-        // TODO: Check and promotion extensions
-
-        // None, Pawn, Knight, Bishop, Rook, Queen, King 
-        private readonly int[] PieceValues = { 0, 100, 320, 320, 500, 900, 0 };
-
         private int searchMaxTime;
         private Timer searchTimer;
 
@@ -47,16 +34,10 @@ namespace ChessChallenge.Example
             // Progressively increase search depth, starting from 2
             for (int depth = 2; ; depth++)
             {
-                // Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms");
-
                 PVS(depth, -9999999, 9999999);
 
                 if (OutOfTime)
                 {
-                    /*
-                    Console.WriteLine("Hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " +
-                        TTRetrieve().Score + " centipawns.");
-                    */
                     return TTRetrieve().BestMove;
                 }
             }
@@ -66,7 +47,7 @@ namespace ChessChallenge.Example
         {
             // Evaluate the gamestate
             if (board.IsDraw())
-                // Discourage draws slightly, unless losing
+                // Discourage draws slightly
                 return -15;
             if (board.IsInCheckmate())
                 // Checkmate = 99999
@@ -150,10 +131,7 @@ namespace ChessChallenge.Example
             }
 
             // Transposition table insertion
-            if (bestEval <= alpha)
-                TTInsert(bestMove, bestEval, depth, 2);
-            else
-                TTInsert(bestMove, bestEval, depth, 1);
+            TTInsert(bestMove, bestEval, depth, bestEval <= alpha ? 2 : 1);
 
             return alpha;
         }
@@ -167,7 +145,7 @@ namespace ChessChallenge.Example
 
             // Evaluate the gamestate
             if (board.IsDraw())
-                // Discourage draws slightly, unless losing
+                // Discourage draws slightly
                 return -15;
             if (board.IsInCheckmate())
                 // Checkmate = 99999
@@ -238,55 +216,76 @@ namespace ChessChallenge.Example
         // Evaluation
         //
 
+        #region Evaluation
+
+        // None, Pawn, Knight, Bishop, Rook, Queen, King 
+        private readonly int[] PieceValues = { 82, 337, 365, 477, 1025, 0, // Middlegame
+                                           94, 281, 297, 512, 936, 0 };// Endgame
+
+        private readonly int[] GamePhaseIncrement = { 0, 1, 1, 2, 4, 0 };
+
         // Big table packed with data from premade piece square tables
-        private readonly ulong[,] PackedEvaluationTables = {
-        { 58233348458073600, 61037146059233280, 63851895826342400, 66655671952007680 },
-        { 63862891026503730, 66665589183147058, 69480338950193202, 226499563094066 },
-        { 63862895153701386, 69480338782421002, 5867015520979476,  8670770172137246 },
-        { 63862916628537861, 69480338782749957, 8681765288087306,  11485519939245081 },
-        { 63872833708024320, 69491333898698752, 8692760404692736,  11496515055522836 },
-        { 63884885386256901, 69502350490469883, 5889005753862902,  8703755520970496 },
-        { 63636395758376965, 63635334969551882, 21474836490,       1516 },
-        { 58006849062751744, 63647386663573504, 63625396431020544, 63614422789579264 }
+        // Unpack using PackedEvaluationTables[set, rank] = file
+        private readonly ulong[] PackedEvaluationTables = {
+        0, 17876852006827220035, 17442764802556560892, 17297209133870877174, 17223739749638733806, 17876759457677835758, 17373217165325565928, 0,
+        13255991644549399438, 17583506568768513230, 2175898572549597664, 1084293395314969850, 18090411128601117687, 17658908863988562672, 17579252489121225964, 17362482624594506424,
+        18088114097928799212, 16144322839035775982, 18381760841018841589, 18376121450291332093, 218152002130610684, 507800692313426432, 78546933140621827, 17502669270662184681,
+        2095587983952846102, 2166845185183979026, 804489620259737085, 17508614433633859824, 17295224476492426983, 16860632592644698081, 14986863555502077410, 17214733645651245043,
+        2241981346783428845, 2671522937214723568, 2819295234159408375, 143848006581874414, 18303471111439576826, 218989722313687542, 143563254730914792, 16063196335921886463,
+        649056947958124756, 17070610696300068628, 17370107729330376954, 16714810863637820148, 15990561411808821214, 17219209584983537398, 362247178929505537, 725340149412010486,
+        0, 9255278100611888762, 4123085205260616768, 868073221978132502, 18375526489308136969, 18158510399056250115, 18086737617269097737, 0,
+        13607044546246993624, 15920488544069483503, 16497805833213047536, 17583469180908143348, 17582910611854720244, 17434276413707386608, 16352837428273869539, 15338966700937764332,
+        17362778423591236342, 17797653976892964347, 216178279655209729, 72628283623606014, 18085900871841415932, 17796820590280441592, 17219225120384218358, 17653536572713270000,
+        217588987618658057, 145525853039167752, 18374121343630509317, 143834816923107843, 17941211704168088322, 17725034519661969661, 18372710631523548412, 17439054852385800698,
+        1010791012631515130, 5929838478495476, 436031265213646066, 1812447229878734594, 1160546708477514740, 218156326927920885, 16926762663678832881, 16497506761183456745,
+        17582909434562406605, 580992990974708984, 656996740801498119, 149207104036540411, 17871989841031265780, 18015818047948390131, 17653269455998023918, 16424899342964550108,
     };
 
-        private int GetSquareBonus(PieceType type, bool isWhite, int file, int rank)
+        private int GetSquareBonus(int type, bool isWhite, int file, int rank)
         {
-            // Because arrays are only 4 squares wide, mirror across files
-            if (file > 3)
-                file = 7 - file;
-
             // Mirror vertically for white pieces, since piece arrays are flipped vertically
             if (isWhite)
                 rank = 7 - rank;
 
-            // First, shift the data so that the correct byte is sitting in the least significant position
-            // Then, mask it out
-            sbyte unpackedData = unchecked((sbyte)((PackedEvaluationTables[rank, file] >> 8 * ((int)type - 1)) & 0xFF));
-
-            // Invert eval scores for black pieces
-            return isWhite ? unpackedData : -unpackedData;
+            // Grab the correct byte representing the value
+            // And multiply it by the reduction factor to get our original value again
+            return (int)Math.Round(unchecked((sbyte)((PackedEvaluationTables[(type * 8) + rank] >> file * 8) & 0xFF)) * 1.461);
         }
 
         private int Evaluate()
         {
-            int score = 0;
+            var middlegame = new int[2];
+            var endgame = new int[2];
+
+            int gamephase = 0;
+
             foreach (PieceList list in board.GetAllPieceLists())
             {
-                // Material evaluation
-                score += PieceValues[(int)list.TypeOfPieceInList] * list.Count * (list.IsWhitePieceList ? 1 : -1);
+                int pieceType = (int)list.TypeOfPieceInList - 1;
+                int colour = list.IsWhitePieceList ? 1 : 0;
 
-                // Placement evaluation
+                // Material evaluation
+                middlegame[colour] += PieceValues[pieceType] * list.Count;
+                endgame[colour] += PieceValues[pieceType + 6] * list.Count;
+
+                // Square evaluation
                 foreach (Piece piece in list)
-                    // Leave out multiplier for white and black since it's worked in already in the GetSquareBonus method
-                    score += GetSquareBonus(piece.PieceType, piece.IsWhite, piece.Square.File, piece.Square.Rank);
+                {
+                    middlegame[colour] += GetSquareBonus(pieceType, piece.IsWhite, piece.Square.File, piece.Square.Rank);
+                    endgame[colour] += GetSquareBonus(pieceType + 6, piece.IsWhite, piece.Square.File, piece.Square.Rank);
+                }
+                gamephase += GamePhaseIncrement[pieceType];
             }
-            return board.IsWhiteToMove ? score : -score;
+
+            // Tapered evaluation
+            int middlegamePhase = Math.Min(gamephase, 24);
+            int finalScore = ((middlegame[1] - middlegame[0]) * middlegamePhase + (endgame[1] - endgame[0]) * (24 - middlegamePhase)) / 24;
+            return board.IsWhiteToMove ? finalScore : -finalScore;
         }
 
-        //
-        // Transposition table
-        //
+        #endregion
+
+        #region Transposition Table
 
         // 0x400000 represents the rough number of entries it would take to fill 256mb
         // Very lowballed to make sure I don't go over
@@ -295,7 +294,7 @@ namespace ChessChallenge.Example
         private TTEntry TTRetrieve()
             => transpositionTable[board.ZobristKey & 0x3FFFFF];
 
-        private void TTInsert(Move bestMove, int score, int depth, sbyte flag)
+        private void TTInsert(Move bestMove, int score, int depth, int flag)
         {
             if (depth > 1 && depth > TTRetrieve().Depth)
                 transpositionTable[board.ZobristKey & 0x3FFFFF] = new TTEntry(
@@ -304,7 +303,6 @@ namespace ChessChallenge.Example
                     score,
                     depth,
                     flag);
-
         }
 
         // public enum Flag
@@ -314,7 +312,7 @@ namespace ChessChallenge.Example
         //    -1 = Lowerbound,
         //     2 = Upperbound
         // }
-        private record struct TTEntry(ulong Hash, Move BestMove, int Score, int Depth, sbyte Flag);
-    }
+        private record struct TTEntry(ulong Hash, Move BestMove, int Score, int Depth, int Flag);
 
-}
+        #endregion
+    }

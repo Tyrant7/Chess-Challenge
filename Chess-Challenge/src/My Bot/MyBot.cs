@@ -39,14 +39,14 @@ public class MyBot : IChessBot
         // Progressively increase search depth, starting from 2
         for (int depth = 2; ; depth++)
         {
-            Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms");
+            // Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms");
 
             PVS(depth, -9999999, 9999999);
 
             if (OutOfTime)
             {
-                Console.WriteLine("Hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " +
-                    TTRetrieve().Score + " centipawns.");
+                // Console.WriteLine("Hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " +
+                //    TTRetrieve().Score + " centipawns.");
                 return TTRetrieve().BestMove;
             }
         }
@@ -60,13 +60,12 @@ public class MyBot : IChessBot
             return -15;
         if (board.IsInCheckmate())
             // Checkmate = 99999
-            // SwiftCheckmateBonus = 5000
-            return -(99999 + (depth * 5000));
+            return -(99999 - board.PlyCount);
 
         // Terminal node, calculate score
         if (depth <= 0)
             // Do a Quiescence Search
-            return QuiescenceSearch(2, alpha, beta);
+            return QuiescenceSearch(alpha, beta);
 
         // Transposition table lookup
         TTEntry entry = TTRetrieve();
@@ -147,7 +146,7 @@ public class MyBot : IChessBot
 
     // Quiescence search with help from
     // https://stackoverflow.com/questions/48846642/is-there-something-wrong-with-my-quiescence-search
-    private int QuiescenceSearch(int depth, int alpha, int beta)
+    private int QuiescenceSearch(int alpha, int beta)
     {
         if (OutOfTime)
             return 0;
@@ -158,8 +157,7 @@ public class MyBot : IChessBot
             return -15;
         if (board.IsInCheckmate())
             // Checkmate = 99999
-            // SwiftCheckmateBonus = 5000
-            return -(99999 + (depth * 5000));
+            return -(99999 - board.PlyCount);
 
         // Determine if quiescence search should be continued
         int bestValue = Evaluate();
@@ -173,7 +171,7 @@ public class MyBot : IChessBot
         foreach (Move move in GetOrdererdMoves(Move.NullMove, !board.IsInCheck()))
         {
             board.MakeMove(move);
-            int eval = -QuiescenceSearch(depth - 1, -beta, -alpha);
+            int eval = -QuiescenceSearch(-beta, -alpha);
             board.UndoMove(move);
 
             bestValue = Math.Max(bestValue, eval);
