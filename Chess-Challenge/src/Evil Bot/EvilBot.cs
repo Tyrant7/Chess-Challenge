@@ -47,14 +47,16 @@ namespace ChessChallenge.Example
             // Progressively increase search depth, starting from 2
             for (int depth = 2; ; depth++)
             {
-                Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms");
+                // Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms");
 
                 PVS(depth, -9999999, 9999999);
 
                 if (OutOfTime)
                 {
+                    /*
                     Console.WriteLine("Hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " +
                         TTRetrieve().Score + " centipawns.");
+                    */
                     return TTRetrieve().BestMove;
                 }
             }

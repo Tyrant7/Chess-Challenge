@@ -168,7 +168,6 @@ public class PieceTableGenerator
         UnpackData(packedData);
     }
 
-    private const int tableSize = 64;
     private const int tableWidth = 8;
     private const int tableHeight = 8;
 

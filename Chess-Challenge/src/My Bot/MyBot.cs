@@ -1,6 +1,7 @@
 ﻿using ChessChallenge.API;
 using System;
 using System.Linq;
+using static System.Formats.Asn1.AsnWriter;
 
 // TODO: MOST IMPORTANT: Implement endgame tables
 // TODO: MOST IMPORTANT: Remove Quiescence unused depth parameter for maximum improvements and use ply to calculate faster mates
@@ -13,9 +14,6 @@ using System.Linq;
 
 public class MyBot : IChessBot
 {
-    // None, Pawn, Knight, Bishop, Rook, Queen, King 
-    private readonly int[] PieceValues = { 0, 100, 320, 320, 500, 900, 0 };
-
     private int searchMaxTime;
     private Timer searchTimer;
 
@@ -42,20 +40,16 @@ public class MyBot : IChessBot
         // Progressively increase search depth, starting from 2
         for (int depth = 2; ; depth++)
         {
-            // Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms");
+            Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms");
 
             PVS(depth, -9999999, 9999999);
 
-            /*
             if (OutOfTime)
             {
                 Console.WriteLine("Hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " +
                     TTRetrieve().Score + " centipawns.");
                 return TTRetrieve().BestMove;
             }
-            */
-            if (OutOfTime)
-                return TTRetrieve().BestMove;
         }
     }
 
@@ -237,6 +231,12 @@ public class MyBot : IChessBot
 
     #region Evaluation
 
+    // None, Pawn, Knight, Bishop, Rook, Queen, King 
+    private readonly int[] PieceMiddlegameValues = { 82, 337, 365, 477, 1025, 0 };
+    private readonly int[] PieceEndgameValues =    { 94, 281, 297, 512, 936, 0 };
+
+    private readonly int[] GamePhaseIncrement = { 0, 1, 1, 2, 4, 0 };
+
     // Big table packed with data from premade piece square tables
     // Unpack using PackedEvaluationTables[set, rank] = file
     private readonly ulong[] PackedEvaluationTables = {
@@ -262,26 +262,43 @@ public class MyBot : IChessBot
 
         // Grab the correct byte representing the value
         // And multiply it by the reduction factor to get our original value again
-        int squareValue = (int)Math.Round(unchecked((sbyte)((PackedEvaluationTables[(type * 8) + rank] >> file * 8) & 0xFF)) * 1.461);
-
-        // Invert eval scores for black pieces
-        return isWhite ? squareValue : -squareValue;
+        return (int)Math.Round(unchecked((sbyte)((PackedEvaluationTables[(type * 8) + rank] >> file * 8) & 0xFF)) * 1.461);
     }
 
     private int Evaluate()
     {
-        int score = 0;
+        var middlegame = new int[2];
+        var endgame = new int[2];
+
+        int gamephase = 0;
+
+        // TODO: Initialize tables with piece values beforehand to see if tokens can be saved
         foreach (PieceList list in board.GetAllPieceLists())
         {
-            // Material evaluation
-            score += PieceValues[(int)list.TypeOfPieceInList] * list.Count * (list.IsWhitePieceList ? 1 : -1);
+            int pieceType = (int)list.TypeOfPieceInList - 1;
+            int colour = list.IsWhitePieceList ? 1 : 0;
 
-            // Placement evaluation
+            // Material evaluation
+            middlegame[colour] += PieceMiddlegameValues[pieceType] * list.Count;
+            endgame[colour] += PieceEndgameValues[pieceType] * list.Count;
+
+            // Square evaluation
             foreach (Piece piece in list)
-                // Leave out multiplier for white and black since it's worked in already in the GetSquareBonus method
-                score += GetSquareBonus((int)piece.PieceType - 1, piece.IsWhite, piece.Square.File, piece.Square.Rank);
+            {
+                middlegame[colour] += GetSquareBonus(pieceType, piece.IsWhite, piece.Square.File, piece.Square.Rank);
+                endgame[colour] += GetSquareBonus(pieceType + 6, piece.IsWhite, piece.Square.File, piece.Square.Rank);
+            }
+            gamephase += GamePhaseIncrement[pieceType];
         }
-        return board.IsWhiteToMove ? score : -score;
+
+        // Tapered evaluation
+        int middlegameScore = middlegame[1] - middlegame[0];
+        int endgameScore = endgame[1] - endgame[0];
+        int middlegamePhase = Math.Min(gamephase, 24);
+        int endgamePhase = 24 - middlegamePhase;
+
+        int finalScore = (middlegameScore * middlegamePhase + endgameScore * endgamePhase) / 24;
+        return board.IsWhiteToMove ? finalScore : -finalScore;
     }
 
     #endregion
