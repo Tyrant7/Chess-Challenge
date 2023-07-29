@@ -1,9 +1,8 @@
 ﻿using ChessChallenge.API;
 using System;
 using System.Linq;
-using static System.Formats.Asn1.AsnWriter;
 
-// TODO: MOST IMPORTANT: Implement endgame tables
+// TODO: MOST IMPORTANT: Rewrite table packing to use decimals instead of ulongs because of their size
 // TODO: MOST IMPORTANT: Remove Quiescence unused depth parameter for maximum improvements and use ply to calculate faster mates
 // TODO: Killer moves
 // TODO: History heuristic
@@ -141,10 +140,7 @@ public class MyBot : IChessBot
         }
 
         // Transposition table insertion
-        if (bestEval <= alpha)
-            TTInsert(bestMove, bestEval, depth, 2);
-        else
-            TTInsert(bestMove, bestEval, depth, 1);
+        TTInsert(bestMove, bestEval, depth, bestEval <= alpha ? 2 : 1);
 
         return alpha;
     }
@@ -232,8 +228,8 @@ public class MyBot : IChessBot
     #region Evaluation
 
     // None, Pawn, Knight, Bishop, Rook, Queen, King 
-    private readonly int[] PieceMiddlegameValues = { 82, 337, 365, 477, 1025, 0 };
-    private readonly int[] PieceEndgameValues =    { 94, 281, 297, 512, 936, 0 };
+    private readonly int[] PieceValues = { 82, 337, 365, 477, 1025, 0, // Middlegame
+                                           94, 281, 297, 512, 936, 0 };// Endgame
 
     private readonly int[] GamePhaseIncrement = { 0, 1, 1, 2, 4, 0 };
 
@@ -272,15 +268,14 @@ public class MyBot : IChessBot
 
         int gamephase = 0;
 
-        // TODO: Initialize tables with piece values beforehand to see if tokens can be saved
         foreach (PieceList list in board.GetAllPieceLists())
         {
             int pieceType = (int)list.TypeOfPieceInList - 1;
             int colour = list.IsWhitePieceList ? 1 : 0;
 
             // Material evaluation
-            middlegame[colour] += PieceMiddlegameValues[pieceType] * list.Count;
-            endgame[colour] += PieceEndgameValues[pieceType] * list.Count;
+            middlegame[colour] += PieceValues[pieceType] * list.Count;
+            endgame[colour] += PieceValues[pieceType + 6] * list.Count;
 
             // Square evaluation
             foreach (Piece piece in list)
@@ -292,12 +287,8 @@ public class MyBot : IChessBot
         }
 
         // Tapered evaluation
-        int middlegameScore = middlegame[1] - middlegame[0];
-        int endgameScore = endgame[1] - endgame[0];
         int middlegamePhase = Math.Min(gamephase, 24);
-        int endgamePhase = 24 - middlegamePhase;
-
-        int finalScore = (middlegameScore * middlegamePhase + endgameScore * endgamePhase) / 24;
+        int finalScore = ((middlegame[1] - middlegame[0]) * middlegamePhase + (endgame[1] - endgame[0]) * (24 - middlegamePhase)) / 24;
         return board.IsWhiteToMove ? finalScore : -finalScore;
     }
 
@@ -312,7 +303,7 @@ public class MyBot : IChessBot
     private TTEntry TTRetrieve()
         => transpositionTable[board.ZobristKey & 0x3FFFFF];
 
-    private void TTInsert(Move bestMove, int score, int depth, sbyte flag)
+    private void TTInsert(Move bestMove, int score, int depth, int flag)
     {
         if (depth > 1 && depth > TTRetrieve().Depth)
             transpositionTable[board.ZobristKey & 0x3FFFFF] = new TTEntry(
@@ -321,7 +312,6 @@ public class MyBot : IChessBot
                 score, 
                 depth, 
                 flag);
-
     }
 
     // public enum Flag
@@ -331,7 +321,7 @@ public class MyBot : IChessBot
     //    -1 = Lowerbound,
     //     2 = Upperbound
     // }
-    private record struct TTEntry(ulong Hash, Move BestMove, int Score, int Depth, sbyte Flag);
+    private record struct TTEntry(ulong Hash, Move BestMove, int Score, int Depth, int Flag);
 
     #endregion
 }
