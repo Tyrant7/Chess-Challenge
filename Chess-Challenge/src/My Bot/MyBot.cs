@@ -39,7 +39,7 @@ public class MyBot : IChessBot
         // Progressively increase search depth, starting from 2
         for (int depth = 2; ; depth++)
         {
-            // Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms");
+            Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms");
 
             PVS(depth, -9999999, 9999999);
 
@@ -62,9 +62,8 @@ public class MyBot : IChessBot
             // Checkmate = 99999
             return -(99999 - board.PlyCount);
 
-        // Terminal node, calculate score
+        // Terminal node, start QSearch
         if (depth <= 0)
-            // Do a Quiescence Search
             return QuiescenceSearch(alpha, beta);
 
         // Transposition table lookup
@@ -73,49 +72,37 @@ public class MyBot : IChessBot
         // Found a valid entry for this position
         if (entry.Hash == board.ZobristKey && entry.Depth >= depth)
         {
-            switch (entry.Flag)
-            {
-                // Exact
-                case 1:
-                    return entry.Score;
-                // Lowerbound
-                case -1:
-                    alpha = Math.Max(alpha, entry.Score);
-                    break;
-                // Default case for upperbound (2) to save a token
-                default:
-                    beta = Math.Min(beta, entry.Score);
-                    break;
-            }
+            // Exact
+            if (entry.Flag == 1)
+                return entry.Score;
+            // Lowerbound
+            if (entry.Flag == -1)
+                alpha = Math.Max(alpha, entry.Score);
+            // Upperbound
+            else
+                beta = Math.Min(beta, entry.Score);
 
             if (alpha >= beta)
                 return entry.Score;
         }
 
-        // Search at a deeper depth
-        Move[] moves = GetOrdererdMoves(entry.BestMove, false);
+        // Using var to save a single token
+        var moves = GetOrdererdMoves(entry.BestMove, false);
 
         int bestEval = -9999999;
         Move bestMove = moves[0];
 
-        int i = 0;
+        bool firstMove = true;
         foreach (Move move in moves)
         {
             board.MakeMove(move);
-            int eval;
 
-            // Always fully search the first child
-            if (i == 0)
-                eval = -PVS(depth - 1, -beta, -alpha);
-            else 
-            {
-                // Search with a null window
-                eval = -PVS(depth - 1, -alpha - 1, -alpha);
+            // Always fully search the first child, search the rest with a null window
+            int eval = firstMove ? -PVS(depth - 1, -beta, -alpha) : -PVS(depth - 1, -alpha - 1, -alpha);
 
-                // Research if failed high
-                if (alpha < eval && eval < beta)
-                    eval = -PVS(depth - 1, -beta, -eval);
-            }
+            // If failed high, do a research
+            if (!firstMove && alpha < eval && eval < beta)
+                eval = -PVS(depth - 1, -beta, -eval);
 
             board.UndoMove(move);
 
@@ -135,7 +122,7 @@ public class MyBot : IChessBot
                 bestEval = eval;
                 alpha = Math.Max(alpha, bestEval);
             }
-            i++;
+            firstMove = false;
         }
 
         // Transposition table insertion
@@ -187,35 +174,15 @@ public class MyBot : IChessBot
     //
 
     // Generates the comment inside, but with 25 fewer tokens
-    private int GetMVV_LVA(PieceType victim, PieceType attacker)
-    {
-        /*
-        // Access with MVV_LVA [victim - 1, attacker - 1]
-        private readonly int[,] MVV_LVA =
-        {
-            // Exclude None and Kings from being the victim because they cannot be captured
-            { 15, 14, 13, 12, 11, 10 }, // victim P, attacker P, N, B, R, Q, K
-            { 25, 24, 23, 22, 21, 20 }, // victim N, attacker P, N, B, R, Q, K
-            { 35, 34, 33, 32, 31, 30 }, // victim B, attacker P, N, B, R, Q, K
-            { 45, 44, 43, 42, 41, 40 }, // victim R, attacker P, N, B, R, Q, K
-            { 55, 54, 53, 52, 51, 50 }, // victim Q, attacker P, N, B, R, Q, K
-        };
-        */
-
-        switch (victim)
-        {
-            case PieceType.None or PieceType.King:
-                return 0;
-            default:
-                return 10 * (int)victim - (int)attacker;
-        }
-    }
+    private int GetMVV_LVA(int victim, int attacker)
+         // 0 = None, 6 = King, no bonuses for these two
+         => victim == 0 || victim == 6 ? 0 : 10 * victim - attacker;
 
     // Scoring algorithm using MVVLVA
     // Taking into account the best move found from the previous search
     private Move[] GetOrdererdMoves(Move hashMove, bool onlyCaptures)
         => board.GetLegalMoves(onlyCaptures).OrderByDescending(move =>
-        GetMVV_LVA(move.CapturePieceType, move.MovePieceType) +
+        GetMVV_LVA((int)move.CapturePieceType, (int)move.MovePieceType) +
         (move == hashMove ? 100 : 0)).ToArray();
 
     //
@@ -282,8 +249,8 @@ public class MyBot : IChessBot
 
         // Tapered evaluation
         int middlegamePhase = Math.Min(gamephase, 24);
-        int finalScore = ((middlegame[1] - middlegame[0]) * middlegamePhase + (endgame[1] - endgame[0]) * (24 - middlegamePhase)) / 24;
-        return board.IsWhiteToMove ? finalScore : -finalScore;
+        return ((middlegame[1] - middlegame[0]) * middlegamePhase + (endgame[1] - endgame[0]) * (24 - middlegamePhase)) / 24
+              * (board.IsWhiteToMove ? 1 : -1);
     }
 
     #endregion
