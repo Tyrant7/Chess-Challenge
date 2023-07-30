@@ -2,10 +2,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Linq;
-using ChessChallenge.API;
 using System.Data;
-using ChessChallenge.Chess;
-using Microsoft.CodeAnalysis.CSharp;
 
 public class PieceTableGenerator
 {
@@ -149,7 +146,7 @@ public class PieceTableGenerator
 
     // None, Pawn, Knight, Bishop, Rook, Queen, King 
     private static readonly short[] PieceValues = { 82, 337, 365, 477, 1025, 0, // Middlegame
-                                                    94, 281, 297, 512, 936, 0}; // Endgame
+                                                    94, 281, 297, 512, 936, 0 }; // Endgame
 
     public static void Generate()
     {
@@ -185,11 +182,10 @@ public class PieceTableGenerator
     private const int tableCount = 12;
 
     // Packs data in the following form
-    // The first 64 elements contain square data in the first 12 bytes (1 byte per piece type, 6 per gamephase)
-    // The following 2 elements contain piece values (2 bytes per value, 6 piece types, 2 gamephases)
+    // Square data in the first 12 bytes of each decimal (1 byte per piece type, 6 per gamephase)
     private static decimal[] PackData(List<int[]> tablesToPack)
     {
-        decimal[] packedData = new decimal[tableSize + 2];
+        decimal[] packedData = new decimal[tableSize];
 
         for (int square = 0; square < tableSize; square++)
         {
@@ -211,19 +207,9 @@ public class PieceTableGenerator
             packedData[square] = new(thirds);
         }
 
-        // Pack the piece values into byte buffers
-        // and place the values in the last 2 slots in the table
-        int[] packedBuffer = new int[4];
-
-        Buffer.BlockCopy(PieceValues, 0, packedBuffer, 0, 12);
-        packedData[tableSize] = new(packedBuffer);
-
-        Buffer.BlockCopy(PieceValues, 12, packedBuffer, 0, 12);
-        packedData[tableSize + 1] = new(packedBuffer);
-
         // Print the newly created table
         Console.Write("{ ");
-        for (int square = 0; square < tableSize + 2; square++)
+        for (int square = 0; square < tableSize; square++)
         {
             if (square % 8 == 0)
                 Console.WriteLine();
@@ -239,18 +225,12 @@ public class PieceTableGenerator
     private static int[][] UnpackData(decimal[] tablesToUnpack)
     {
         var pestoUnpacked = new int[tableSize][];
-        var pieceValues = new short[12];
-
-        void Copy(int i) => Buffer.BlockCopy(decimal.GetBits(tablesToUnpack[tableSize + i]), 0, pieceValues, i * 12, 12);
-        Copy(0);
-        Copy(1);
-
         for (int i = 0; i < tableSize; i++)
         {
             int pieceType = 0;
             pestoUnpacked[i] = decimal.GetBits(tablesToUnpack[i]).Take(3)
                 .SelectMany(c => BitConverter.GetBytes(c)
-                    .Select((byte square) => (int)Math.Round((sbyte)square * 1.461) + pieceValues[pieceType++]))
+                    .Select((byte square) => (int)((sbyte)square * 1.461) + PieceValues[pieceType++]))
                 .ToArray();
         }
 

@@ -2,8 +2,7 @@
 using System;
 using System.Linq;
 
-// TODO: MOST IMPORTANT: Rewrite table packing to use decimals instead of ulongs because of their size
-// TODO: MOST IMPORTANT: Remove Quiescence unused depth parameter for maximum improvements and use ply to calculate faster mates
+// TODO: MOST IMPORTANT: Rewrite table packing to try and see if not packing the piece values is more token efficient
 // TODO: Killer moves
 // TODO: History heuristic
 // TODO: Late move reductions
@@ -193,6 +192,10 @@ public class MyBot : IChessBot
 
     private readonly int[] GamePhaseIncrement = { 0, 1, 1, 2, 4, 0 };
 
+    // None, Pawn, Knight, Bishop, Rook, Queen, King 
+    private readonly short[] PieceValues = { 82, 337, 365, 477, 1025, 0, // Middlegame
+                                             94, 281, 297, 512, 936, 0}; // Endgame
+
     // Big table packed with data from premade piece square tables
     // Unpack using PackedEvaluationTables[set, rank] = file
     private readonly decimal[] PackedPestoTables = {
@@ -204,7 +207,6 @@ public class MyBot : IChessBot
         75502243563200070682362835182m, 78896921543467230670583692029m, 2489164206166677455700101373m, 4338830174078735659125311481m, 4960199192571758553533648130m, 3420013420025511569771334658m, 1557077491473974933188251927m, 77376040767919248347203368440m,
         73949978050619586491881614568m, 77043619187199676893167803647m, 1212557245150259869494540530m, 3081561358716686153294085872m, 3392217589357453836837847030m, 1219782446916489227407330320m, 78580145051212187267589731866m, 75798434925965430405537592305m,
         68369566912511282590874449920m, 72396532057599326246617936384m, 75186737388538008131054524416m, 77027917484951889231108827392m, 73655004947793353634062267392m, 76417372019396591550492896512m, 74568981255592060493492515584m, 70529879645288096380279255040m,
-        18908046940683866538066m, 17266296569455839871070m,
     };
 
     private readonly int[][] UnpackedPestoTables;
@@ -212,18 +214,12 @@ public class MyBot : IChessBot
     public MyBot()
     {
         UnpackedPestoTables = new int[64][];
-        var pieceValues = new short[12];
-
-        void Copy(int i) => Buffer.BlockCopy(decimal.GetBits(PackedPestoTables[64 + i]), 0, pieceValues, i * 12, 12);
-        Copy(0);
-        Copy(1);
-
         for (int i = 0; i < 64; i++)
         {
             int pieceType = 0;
             UnpackedPestoTables[i] = decimal.GetBits(PackedPestoTables[i]).Take(3)
                 .SelectMany(c => BitConverter.GetBytes(c)
-                    .Select((byte square) => (int)Math.Round((sbyte)square * 1.461) + pieceValues[pieceType++]))
+                    .Select((byte square) => (int)((sbyte)square * 1.461) + PieceValues[pieceType++]))
                 .ToArray();
         }
     }
