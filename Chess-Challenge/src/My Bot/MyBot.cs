@@ -32,7 +32,7 @@ public class MyBot : IChessBot
         // Cache the board to save precious tokens
         board = newBoard;
 
-        // 1/20th of our remaining time, split among all of the moves
+        // 1/30th of our remaining time, split among all of the moves
         searchMaxTime = timer.MillisecondsRemaining / 30;
         searchTimer = timer;
 
