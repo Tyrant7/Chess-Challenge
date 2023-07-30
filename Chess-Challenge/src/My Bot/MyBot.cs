@@ -1,6 +1,7 @@
 ﻿using ChessChallenge.API;
 using System;
 using System.Linq;
+using System.Threading.Tasks.Sources;
 
 // TODO: Killer moves
 // TODO: History heuristic
@@ -50,7 +51,7 @@ public class MyBot : IChessBot
         }
     }
 
-    private int PVS(int depth, int alpha, int beta)
+    private int PVS(int depth, int alpha, int beta, bool allowNull = true)
     {
         // Evaluate the gamestate
         if (board.IsDraw())
@@ -84,6 +85,21 @@ public class MyBot : IChessBot
                 return entry.Score;
         }
 
+        // TODO: Test this with the fixed PVS against fixed PVS without NMP
+        // NULL move pruning
+        // If this node is NOT part of the PV
+        /*
+        if (beta - alpha <= 1 && depth > 3 && allowNull && board.TrySkipTurn())
+        {
+            int eval = -PVS(depth - 2, -beta, 1 - beta, false);
+            board.UndoSkipTurn();
+
+            // Failed high on the null move
+            if (eval >= beta)
+                return eval;
+        }
+        */
+
         // Using var to save a single token
         var moves = GetOrdererdMoves(entry.BestMove, false);
 
@@ -100,7 +116,7 @@ public class MyBot : IChessBot
 
             // If failed high, do a research
             if (!firstMove && alpha < eval && eval < beta)
-                eval = -PVS(depth - 1, -beta, -eval);
+                eval = -PVS(depth - 1, -beta, -alpha);
 
             board.UndoMove(move);
 
@@ -118,9 +134,14 @@ public class MyBot : IChessBot
 
                 bestMove = move;
                 bestEval = eval;
-                alpha = Math.Max(alpha, bestEval);
+                if (bestEval > alpha) 
+                {
+                    alpha = bestEval;
+
+                    // TODO: Experiment with moving this outside of this condition, but keeping it inside the sorrounding if
+                    firstMove = false;
+                }
             }
-            firstMove = false;
         }
 
         // Transposition table insertion
