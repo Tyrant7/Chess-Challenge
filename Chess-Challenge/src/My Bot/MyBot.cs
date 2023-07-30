@@ -2,7 +2,6 @@
 using System;
 using System.Linq;
 
-// TODO: MOST IMPORTANT: Rewrite table packing to try and see if not packing the piece values is more token efficient
 // TODO: Killer moves
 // TODO: History heuristic
 // TODO: Late move reductions
