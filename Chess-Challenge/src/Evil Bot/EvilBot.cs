@@ -32,9 +32,9 @@ namespace ChessChallenge.Example
             // Progressively increase search depth, starting from 2
             for (int depth = 2; ; depth++)
             {
-                Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms");
+                // Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms");
 
-                PVS(depth, -9999999, 9999999);
+                PVS(depth, -9999999, 9999999, 0);
 
                 if (OutOfTime)
                 {
@@ -45,25 +45,26 @@ namespace ChessChallenge.Example
             }
         }
 
-        private int PVS(int depth, int alpha, int beta)
+        private int PVS(int depth, int alpha, int beta, int searchPly, bool allowNull = true)
         {
             // Evaluate the gamestate
             if (board.IsDraw())
                 // Discourage draws slightly
-                return -15;
+                return 0;
             if (board.IsInCheckmate())
                 // Checkmate = 99999
-                return -(99999 - board.PlyCount);
+                return -(99999 - searchPly);
 
             // Terminal node, start QSearch
             if (depth <= 0)
-                return QuiescenceSearch(alpha, beta);
+                return QuiescenceSearch(alpha, beta, searchPly + 1);
 
             // Transposition table lookup
             TTEntry entry = TTRetrieve();
 
             // Found a valid entry for this position
-            if (entry.Hash == board.ZobristKey && entry.Depth >= depth)
+            if (entry.Hash == board.ZobristKey && searchPly > 0 &&
+                entry.Depth >= depth)
             {
                 // Exact
                 if (entry.Flag == 1)
@@ -79,24 +80,33 @@ namespace ChessChallenge.Example
                     return entry.Score;
             }
 
+            // TODO: Test this with the fixed PVS against fixed PVS without NMP
+            // NULL move pruning
+            // If this node is NOT part of the PV
+            /*
+            if (beta - alpha <= 1 && depth > 3 && allowNull && board.TrySkipTurn())
+            {
+                int eval = -PVS(depth - 2, -beta, 1 - beta, false);
+                board.UndoSkipTurn();
+
+                // Failed high on the null move
+                if (eval >= beta)
+                    return eval;
+            }
+            */
+
             // Using var to save a single token
             var moves = GetOrdererdMoves(entry.BestMove, false);
 
             int bestEval = -9999999;
             Move bestMove = moves[0];
 
-            bool firstMove = true;
             foreach (Move move in moves)
             {
                 board.MakeMove(move);
 
                 // Always fully search the first child, search the rest with a null window
-                int eval = firstMove ? -PVS(depth - 1, -beta, -alpha) : -PVS(depth - 1, -alpha - 1, -alpha);
-
-                // If failed high, do a research
-                if (!firstMove && alpha < eval && eval < beta)
-                    eval = -PVS(depth - 1, -beta, -eval);
-
+                int eval = -PVS(depth - 1, -beta, -alpha, searchPly + 1);
                 board.UndoMove(move);
 
                 if (OutOfTime)
@@ -104,18 +114,16 @@ namespace ChessChallenge.Example
 
                 if (eval > bestEval)
                 {
-                    // Beta cutoff
-                    if (eval >= beta)
+                    bestMove = move;
+                    bestEval = eval;
+                    alpha = Math.Max(eval, alpha);
+
+                    if (alpha >= beta)
                     {
                         TTInsert(move, eval, depth, -1);
                         return eval;
                     }
-
-                    bestMove = move;
-                    bestEval = eval;
-                    alpha = Math.Max(alpha, bestEval);
                 }
-                firstMove = false;
             }
 
             // Transposition table insertion
@@ -126,7 +134,7 @@ namespace ChessChallenge.Example
 
         // Quiescence search with help from
         // https://stackoverflow.com/questions/48846642/is-there-something-wrong-with-my-quiescence-search
-        private int QuiescenceSearch(int alpha, int beta)
+        private int QuiescenceSearch(int alpha, int beta, int searchPly)
         {
             if (OutOfTime)
                 return 0;
@@ -134,10 +142,10 @@ namespace ChessChallenge.Example
             // Evaluate the gamestate
             if (board.IsDraw())
                 // Discourage draws slightly
-                return -15;
+                return 0;
             if (board.IsInCheckmate())
                 // Checkmate = 99999
-                return -(99999 - board.PlyCount);
+                return -(99999 - searchPly);
 
             // Determine if quiescence search should be continued
             int bestValue = Evaluate();
@@ -151,7 +159,7 @@ namespace ChessChallenge.Example
             foreach (Move move in GetOrdererdMoves(Move.NullMove, !board.IsInCheck()))
             {
                 board.MakeMove(move);
-                int eval = -QuiescenceSearch(-beta, -alpha);
+                int eval = -QuiescenceSearch(-beta, -alpha, searchPly + 1);
                 board.UndoMove(move);
 
                 bestValue = Math.Max(bestValue, eval);
@@ -220,26 +228,22 @@ namespace ChessChallenge.Example
 
         private int Evaluate()
         {
-            var middlegame = new int[2];
-            var endgame = new int[2];
-
-            int gamephase = 0;
-
+            int middlegame = 0, endgame = 0, gamephase = 0;
             foreach (PieceList list in board.GetAllPieceLists())
                 foreach (Piece piece in list)
                 {
                     int pieceType = (int)list.TypeOfPieceInList - 1;
-                    int colour = list.IsWhitePieceList ? 1 : 0;
+                    int colour = list.IsWhitePieceList ? 1 : -1;
                     int index = piece.Square.Index ^ (piece.IsWhite ? 56 : 0);
 
-                    middlegame[colour] += UnpackedPestoTables[index][pieceType];
-                    endgame[colour] += UnpackedPestoTables[index][pieceType + 6];
+                    middlegame += colour * UnpackedPestoTables[index][pieceType];
+                    endgame += colour * UnpackedPestoTables[index][pieceType + 6];
                     gamephase += GamePhaseIncrement[pieceType];
                 }
 
             // Tapered evaluation
             int middlegamePhase = Math.Min(gamephase, 24);
-            return ((middlegame[1] - middlegame[0]) * middlegamePhase + (endgame[1] - endgame[0]) * (24 - middlegamePhase)) / 24
+            return (middlegame * middlegamePhase + endgame * (24 - middlegamePhase)) / 24
                   * (board.IsWhiteToMove ? 1 : -1);
         }
 

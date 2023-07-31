@@ -1,8 +1,8 @@
 ﻿using ChessChallenge.API;
 using System;
 using System.Linq;
-using System.Threading.Tasks.Sources;
 
+// TODO: Most Important: Use bitboards for evaluation instead of piece lists
 // TODO: Killer moves
 // TODO: History heuristic
 // TODO: Late move reductions
@@ -38,38 +38,39 @@ public class MyBot : IChessBot
         // Progressively increase search depth, starting from 2
         for (int depth = 2; ; depth++)
         {
-            Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms");
+            // Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms");
 
-            PVS(depth, -9999999, 9999999);
+            PVS(depth, -9999999, 9999999, 0);
 
             if (OutOfTime)
             {
-                // Console.WriteLine("Hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " +
-                //    TTRetrieve().Score + " centipawns.");
+                Console.WriteLine("Hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " +
+                    TTRetrieve().Score + " centipawns.");
                 return TTRetrieve().BestMove;
             }
         }
     }
 
-    private int PVS(int depth, int alpha, int beta, bool allowNull = true)
+    private int PVS(int depth, int alpha, int beta, int searchPly, bool allowNull = true)
     {
         // Evaluate the gamestate
         if (board.IsDraw())
             // Discourage draws slightly
-            return -15;
+            return 0;
         if (board.IsInCheckmate())
             // Checkmate = 99999
-            return -(99999 - board.PlyCount);
+            return -(99999 - searchPly);
 
         // Terminal node, start QSearch
         if (depth <= 0)
-            return QuiescenceSearch(alpha, beta);
+            return QuiescenceSearch(alpha, beta, searchPly + 1);
 
         // Transposition table lookup
         TTEntry entry = TTRetrieve();
 
         // Found a valid entry for this position
-        if (entry.Hash == board.ZobristKey && entry.Depth >= depth)
+        if (entry.Hash == board.ZobristKey && searchPly > 0 && 
+            entry.Depth >= depth)
         {
             // Exact
             if (entry.Flag == 1)
@@ -106,17 +107,17 @@ public class MyBot : IChessBot
         int bestEval = -9999999;
         Move bestMove = moves[0];
 
-        bool firstMove = true;
+        bool searchForPV = true;
         foreach (Move move in moves)
         {
             board.MakeMove(move);
 
             // Always fully search the first child, search the rest with a null window
-            int eval = firstMove ? -PVS(depth - 1, -beta, -alpha) : -PVS(depth - 1, -alpha - 1, -alpha);
+            int eval = -PVS(depth - 1, searchForPV ? -beta : -alpha - 1, -alpha, searchPly + 1);
 
-            // If failed high, do a research
-            if (!firstMove && alpha < eval && eval < beta)
-                eval = -PVS(depth - 1, -beta, -alpha);
+            // Found a move that can raise alpha, do a research
+            if (!searchForPV && alpha < eval && eval < beta)
+                eval = -PVS(depth - 1, -beta, -alpha, searchPly + 1);
 
             board.UndoMove(move);
 
@@ -125,23 +126,17 @@ public class MyBot : IChessBot
 
             if (eval > bestEval)
             {
-                // Beta cutoff
-                if (eval >= beta)
+                bestMove = move;
+                bestEval = eval;
+                alpha = Math.Max(eval, alpha);
+
+                if (alpha >= beta)
                 {
                     TTInsert(move, eval, depth, -1);
                     return eval;
                 }
-
-                bestMove = move;
-                bestEval = eval;
-                if (bestEval > alpha) 
-                {
-                    alpha = bestEval;
-
-                    // TODO: Experiment with moving this outside of this condition, but keeping it inside the sorrounding if
-                    firstMove = false;
-                }
             }
+            searchForPV = false;
         }
 
         // Transposition table insertion
@@ -152,7 +147,7 @@ public class MyBot : IChessBot
 
     // Quiescence search with help from
     // https://stackoverflow.com/questions/48846642/is-there-something-wrong-with-my-quiescence-search
-    private int QuiescenceSearch(int alpha, int beta)
+    private int QuiescenceSearch(int alpha, int beta, int searchPly)
     {
         if (OutOfTime)
             return 0;
@@ -160,10 +155,10 @@ public class MyBot : IChessBot
         // Evaluate the gamestate
         if (board.IsDraw())
             // Discourage draws slightly
-            return -15;
+            return 0;
         if (board.IsInCheckmate())
             // Checkmate = 99999
-            return -(99999 - board.PlyCount);
+            return -(99999 - searchPly);
 
         // Determine if quiescence search should be continued
         int bestValue = Evaluate();
@@ -177,7 +172,7 @@ public class MyBot : IChessBot
         foreach (Move move in GetOrdererdMoves(Move.NullMove, !board.IsInCheck()))
         {
             board.MakeMove(move);
-            int eval = -QuiescenceSearch(-beta, -alpha);
+            int eval = -QuiescenceSearch(-beta, -alpha, searchPly + 1);
             board.UndoMove(move);
 
             bestValue = Math.Max(bestValue, eval);
@@ -192,7 +187,6 @@ public class MyBot : IChessBot
     // Move Ordering
     //
 
-    // Generates the comment inside, but with 25 fewer tokens
     private int GetMVV_LVA(int victim, int attacker)
          // 0 = None, 6 = King, no bonuses for these two
          => victim == 0 || victim == 6 ? 0 : 10 * victim - attacker;
@@ -246,26 +240,22 @@ public class MyBot : IChessBot
 
     private int Evaluate()
     {
-        var middlegame = new int[2];
-        var endgame = new int[2];
-
-        int gamephase = 0;
-
+        int middlegame = 0, endgame = 0, gamephase = 0;
         foreach (PieceList list in board.GetAllPieceLists())
             foreach (Piece piece in list)
             {
                 int pieceType = (int)list.TypeOfPieceInList - 1;
-                int colour = list.IsWhitePieceList ? 1 : 0;
+                int colour = list.IsWhitePieceList ? 1 : -1;
                 int index = piece.Square.Index ^ (piece.IsWhite ? 56 : 0);
 
-                middlegame[colour] += UnpackedPestoTables[index][pieceType];
-                endgame[colour] += UnpackedPestoTables[index][pieceType + 6];
+                middlegame += colour * UnpackedPestoTables[index][pieceType];
+                endgame += colour * UnpackedPestoTables[index][pieceType + 6];
                 gamephase += GamePhaseIncrement[pieceType];
             }
 
         // Tapered evaluation
         int middlegamePhase = Math.Min(gamephase, 24);
-        return ((middlegame[1] - middlegame[0]) * middlegamePhase + (endgame[1] - endgame[0]) * (24 - middlegamePhase)) / 24
+        return (middlegame * middlegamePhase + endgame * (24 - middlegamePhase)) / 24
               * (board.IsWhiteToMove ? 1 : -1);
     }
 
