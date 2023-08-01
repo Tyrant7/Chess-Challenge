@@ -5,6 +5,7 @@ using System.Linq;
 // TODO: Most Important: Combine PVS and QSearch into 1 function
 // TODO: Most Important: Experiment with a larger TT size to improve bot and hopefully fix PVS as well
 // TODO: Most Important: Setup that faster testing environment that everybody seems to have
+// TODO: Most Important: Implement history heuristic with piece-to
 
 // Heuristics
 // TODO: Killer moves
@@ -12,6 +13,7 @@ using System.Linq;
 // TODO: Passed pawn evaluation
 // TODO: Null move pruning
 // TODO: Check and promotion extensions
+// TODO: Experiment with new sorting techniques for moves
 
 public class MyBot : IChessBot
 {
@@ -20,7 +22,7 @@ public class MyBot : IChessBot
 
     // Return true if out of time AND a valid move has been found
     private bool OutOfTime => searchTimer.MillisecondsElapsedThisTurn > searchMaxTime &&
-                              TTRetrieve().Hash == board.ZobristKey && 
+                              TTRetrieve().Hash == board.ZobristKey &&
                               TTRetrieve().BestMove != Move.NullMove;
 
     Board board;
@@ -43,11 +45,11 @@ public class MyBot : IChessBot
         searchTimer = timer;
 
         // Progressively increase search depth, starting from 2
-        for (int depth = 2; ; depth++)
+        for (int depth = 2; ;)
         {
             // Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms");
 
-            PVS(depth, -9999999, 9999999, 0);
+            PVS(depth++, -9999999, 9999999, 0);
 
             /*
             if (OutOfTime)
@@ -106,7 +108,7 @@ public class MyBot : IChessBot
         TTEntry entry = TTRetrieve();
 
         // Found a valid entry for this position
-        if (entry.Hash == board.ZobristKey && searchPly > 0 && 
+        if (entry.Hash == board.ZobristKey && searchPly > 0 &&
             entry.Depth >= depth)
         {
             // Exact
@@ -229,18 +231,23 @@ public class MyBot : IChessBot
 
     int[,,] historyHeuristics;
 
-    private int GetMVV_LVA(int victim, int attacker)
-         // 0 = None, 6 = King, no bonuses for these two
-         => victim == 0 || victim == 6 ? 0 : 1000 * victim - attacker;
-
     // Scoring algorithm using MVVLVA
     // Taking into account the best move found from the previous search
-    private Move[] GetOrderedMoves(Move hashMove, bool onlyCaptures)
-        => board.GetLegalMoves(onlyCaptures).OrderByDescending(move =>
-        GetMVV_LVA((int)move.CapturePieceType, (int)move.MovePieceType) +
-        (move == hashMove ? 9000 : 0) +
-        historyHeuristics[board.IsWhiteToMove ? 1 : 0, move.StartSquare.Index, move.TargetSquare.Index])
-        .ToArray();
+    private Move[] GetOrderedMoves(Move hashMove, bool onlyCaputures)
+        => board.GetLegalMoves(onlyCaputures).OrderByDescending(move =>
+        {
+            // Cache this here to save tokens
+            int victim = (int)move.CapturePieceType;
+
+            // MVVLVA: 0 = None, 6 = King, no bonuses for these two
+            return (victim == 0 || victim == 6 ? 0 : 1000 * victim - (int)move.MovePieceType) +
+
+            // Always check the hash move first
+            (move == hashMove ? 9000 : 0) +
+
+            // History heuristic
+            historyHeuristics[board.IsWhiteToMove ? 1 : 0, move.StartSquare.Index, move.TargetSquare.Index];
+        }).ToArray();
 
     //
     // Evaluation
@@ -321,10 +328,10 @@ public class MyBot : IChessBot
     {
         if (depth > 1 && depth > TTRetrieve().Depth)
             transpositionTable[board.ZobristKey & 0x3FFFFF] = new TTEntry(
-                board.ZobristKey, 
-                bestMove, 
-                score, 
-                depth, 
+                board.ZobristKey,
+                bestMove,
+                score,
+                depth,
                 flag);
     }
 
