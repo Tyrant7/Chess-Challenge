@@ -2,9 +2,14 @@
 using System;
 using System.Linq;
 
-// TODO: Most Important: Use bitboards for evaluation instead of piece lists
-// TODO: Killer moves
+// TODO: Most Important: Combine PVS and QSearch into 1 function
+// TODO: Most Important: Experiment with not using the results of an unfinished search to try to fix PVS
+// TODO: Most Important: Experiment with a larger TT size to improve bot and hopefully fix PVS as well
+// TODO: Most Important: Setup that faster testing environment that everybody seems to have
+
+// Heuristics
 // TODO: History heuristic
+// TODO: Killer moves
 // TODO: Late move reductions
 // TODO: Passed pawn evaluation
 // TODO: Null move pruning
@@ -49,6 +54,31 @@ public class MyBot : IChessBot
                 return TTRetrieve().BestMove;
             }
         }
+
+        // DEBUG
+        /*
+        board = newBoard;
+
+        int startMS = timer.MillisecondsElapsedThisTurn;
+        for (int i = 0; i < 500000; i++)
+        {
+            MyEvaluate();
+        }
+
+        Console.WriteLine("My evaluation: " + MyEvaluate());
+        Console.WriteLine(timer.MillisecondsElapsedThisTurn - startMS + "ms to evaluate using my method");
+
+        startMS = timer.MillisecondsElapsedThisTurn;
+        for (int i = 0; i < 500000; i++)
+        {
+            Evaluate();
+        }
+
+        Console.WriteLine("JW's evaluation: " + Evaluate());
+        Console.WriteLine(timer.MillisecondsElapsedThisTurn - startMS + "ms to evaluate using JW's method");
+
+        return newBoard.GetLegalMoves()[0];
+        */
     }
 
     private int PVS(int depth, int alpha, int beta, int searchPly, bool allowNull = true)
@@ -102,7 +132,7 @@ public class MyBot : IChessBot
         */
 
         // Using var to save a single token
-        var moves = GetOrdererdMoves(entry.BestMove, false);
+        var moves = GetOrderedMoves(entry.BestMove, false);
 
         int bestEval = -9999999;
         Move bestMove = moves[0];
@@ -169,7 +199,7 @@ public class MyBot : IChessBot
 
         // If in check, look into all moves, otherwise just captures
         // Also no hash move for Quiescence search
-        foreach (Move move in GetOrdererdMoves(Move.NullMove, !board.IsInCheck()))
+        foreach (Move move in GetOrderedMoves(Move.NullMove, !board.IsInCheck()))
         {
             board.MakeMove(move);
             int eval = -QuiescenceSearch(-beta, -alpha, searchPly + 1);
@@ -193,7 +223,7 @@ public class MyBot : IChessBot
 
     // Scoring algorithm using MVVLVA
     // Taking into account the best move found from the previous search
-    private Move[] GetOrdererdMoves(Move hashMove, bool onlyCaptures)
+    private Move[] GetOrderedMoves(Move hashMove, bool onlyCaptures)
         => board.GetLegalMoves(onlyCaptures).OrderByDescending(move =>
         GetMVV_LVA((int)move.CapturePieceType, (int)move.MovePieceType) +
         (move == hashMove ? 100 : 0)).ToArray();
@@ -228,35 +258,38 @@ public class MyBot : IChessBot
     public MyBot()
     {
         UnpackedPestoTables = new int[64][];
-        for (int i = 0; i < 64; i++)
+        UnpackedPestoTables = PackedPestoTables.Select(packedTable =>
         {
             int pieceType = 0;
-            UnpackedPestoTables[i] = decimal.GetBits(PackedPestoTables[i]).Take(3)
+            return decimal.GetBits(packedTable).Take(3)
                 .SelectMany(c => BitConverter.GetBytes(c)
                     .Select((byte square) => (int)((sbyte)square * 1.461) + PieceValues[pieceType++]))
                 .ToArray();
-        }
+        }).ToArray();
     }
 
     private int Evaluate()
     {
         int middlegame = 0, endgame = 0, gamephase = 0;
-        foreach (PieceList list in board.GetAllPieceLists())
-            foreach (Piece piece in list)
-            {
-                int pieceType = (int)list.TypeOfPieceInList - 1;
-                int colour = list.IsWhitePieceList ? 1 : -1;
-                int index = piece.Square.Index ^ (piece.IsWhite ? 56 : 0);
+        foreach (bool sideToMove in new[] { true, false })
+        {
+            // Initialize to the pawn bitboard
+            ulong mask = board.GetPieceBitboard(PieceType.Pawn, sideToMove);
 
-                middlegame += colour * UnpackedPestoTables[index][pieceType];
-                endgame += colour * UnpackedPestoTables[index][pieceType + 6];
-                gamephase += GamePhaseIncrement[pieceType];
-            }
+            // Start from the second bitboard and up since pawns have already been handled
+            for (int piece = 0, square; piece < 5; mask = board.GetPieceBitboard((PieceType)(++piece + 1), sideToMove))
+                while (mask != 0)
+                {
+                    gamephase += GamePhaseIncrement[piece];
+                    square = BitboardHelper.ClearAndGetIndexOfLSB(ref mask) ^ (sideToMove ? 56 : 0);
+                    middlegame += UnpackedPestoTables[square][piece];
+                    endgame += UnpackedPestoTables[square][piece + 6];
+                }
 
-        // Tapered evaluation
-        int middlegamePhase = Math.Min(gamephase, 24);
-        return (middlegame * middlegamePhase + endgame * (24 - middlegamePhase)) / 24
-              * (board.IsWhiteToMove ? 1 : -1);
+            middlegame = -middlegame;
+            endgame = -endgame;
+        }
+        return (middlegame * gamephase + endgame * (24 - gamephase)) / 24 * (board.IsWhiteToMove ? 1 : -1);
     }
 
     #endregion

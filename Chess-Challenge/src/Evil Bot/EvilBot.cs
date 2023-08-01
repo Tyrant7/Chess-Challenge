@@ -101,12 +101,18 @@ namespace ChessChallenge.Example
             int bestEval = -9999999;
             Move bestMove = moves[0];
 
+            bool searchForPV = true;
             foreach (Move move in moves)
             {
                 board.MakeMove(move);
 
                 // Always fully search the first child, search the rest with a null window
-                int eval = -PVS(depth - 1, -beta, -alpha, searchPly + 1);
+                int eval = -PVS(depth - 1, searchForPV ? -beta : -alpha - 1, -alpha, searchPly + 1);
+
+                // Found a move that can raise alpha, do a research
+                if (!searchForPV && alpha < eval && eval < beta)
+                    eval = -PVS(depth - 1, -beta, -alpha, searchPly + 1);
+
                 board.UndoMove(move);
 
                 if (OutOfTime)
@@ -124,6 +130,7 @@ namespace ChessChallenge.Example
                         return eval;
                     }
                 }
+                searchForPV = false;
             }
 
             // Transposition table insertion
