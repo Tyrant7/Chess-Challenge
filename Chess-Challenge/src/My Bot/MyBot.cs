@@ -41,13 +41,13 @@ public class MyBot : IChessBot
 
         // 1/30th of our remaining time, split among all of the moves
         searchMaxTime = timer.MillisecondsRemaining / 30;
-        // searchMaxTime = 60000;
+        searchMaxTime = 800000;
         searchTimer = timer;
 
         // Progressively increase search depth, starting from 2
         for (int depth = 2; ;)
         {
-            // Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms");
+            Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms");
 
             PVS(depth++, -9999999, 9999999, 0);
 
@@ -125,20 +125,17 @@ public class MyBot : IChessBot
                 return entry.Score;
         }
 
-        // TODO: Test this with the fixed PVS against fixed PVS without NMP
         // NULL move pruning
         // If this node is NOT part of the PV
-        /*
         if (beta - alpha <= 1 && depth > 3 && allowNull && board.TrySkipTurn())
         {
-            int eval = -PVS(depth - 2, -beta, 1 - beta, false);
+            int eval = -PVS(depth - 2, -beta, 1 - beta, searchPly + 1, false);
             board.UndoSkipTurn();
 
             // Failed high on the null move
             if (eval >= beta)
                 return eval;
         }
-        */
 
         // Using var to save a single token
         var moves = GetOrderedMoves(entry.BestMove, false);

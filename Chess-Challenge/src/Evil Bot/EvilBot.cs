@@ -30,7 +30,6 @@ namespace ChessChallenge.Example
 
             // 1/30th of our remaining time, split among all of the moves
             searchMaxTime = timer.MillisecondsRemaining / 30;
-            // searchMaxTime = 60000;
             searchTimer = timer;
 
             // Progressively increase search depth, starting from 2
@@ -120,7 +119,7 @@ namespace ChessChallenge.Example
             /*
             if (beta - alpha <= 1 && depth > 3 && allowNull && board.TrySkipTurn())
             {
-                int eval = -PVS(depth - 2, -beta, 1 - beta, false);
+                int eval = -PVS(depth - 2, -beta, 1 - beta, searchPly + 1, false);
                 board.UndoSkipTurn();
 
                 // Failed high on the null move
@@ -334,5 +333,5 @@ namespace ChessChallenge.Example
         private record struct TTEntry(ulong Hash, Move BestMove, int Score, int Depth, int Flag);
 
         #endregion
-    } 
+    }
 }
