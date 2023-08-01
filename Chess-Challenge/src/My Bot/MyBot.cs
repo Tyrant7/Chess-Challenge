@@ -3,12 +3,10 @@ using System;
 using System.Linq;
 
 // TODO: Most Important: Combine PVS and QSearch into 1 function
-// TODO: Most Important: Experiment with not using the results of an unfinished search to try to fix PVS
 // TODO: Most Important: Experiment with a larger TT size to improve bot and hopefully fix PVS as well
 // TODO: Most Important: Setup that faster testing environment that everybody seems to have
 
 // Heuristics
-// TODO: History heuristic
 // TODO: Killer moves
 // TODO: Late move reductions
 // TODO: Passed pawn evaluation
@@ -36,8 +34,12 @@ public class MyBot : IChessBot
         // Cache the board to save precious tokens
         board = newBoard;
 
+        // Reset history heuristics
+        historyHeuristics = new int[2, 64, 64];
+
         // 1/30th of our remaining time, split among all of the moves
         searchMaxTime = timer.MillisecondsRemaining / 30;
+        // searchMaxTime = 60000;
         searchTimer = timer;
 
         // Progressively increase search depth, starting from 2
@@ -47,12 +49,17 @@ public class MyBot : IChessBot
 
             PVS(depth, -9999999, 9999999, 0);
 
+            /*
             if (OutOfTime)
             {
                 Console.WriteLine("Hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " +
                     TTRetrieve().Score + " centipawns.");
                 return TTRetrieve().BestMove;
             }
+            */
+
+            if (OutOfTime)
+                return TTRetrieve().BestMove;
         }
 
         // DEBUG
@@ -162,6 +169,9 @@ public class MyBot : IChessBot
 
                 if (alpha >= beta)
                 {
+                    if (!move.IsCapture)
+                        historyHeuristics[board.IsWhiteToMove ? 1 : 0, move.StartSquare.Index, move.TargetSquare.Index] += depth * depth;
+
                     TTInsert(move, eval, depth, -1);
                     return eval;
                 }
@@ -217,16 +227,20 @@ public class MyBot : IChessBot
     // Move Ordering
     //
 
+    int[,,] historyHeuristics;
+
     private int GetMVV_LVA(int victim, int attacker)
          // 0 = None, 6 = King, no bonuses for these two
-         => victim == 0 || victim == 6 ? 0 : 10 * victim - attacker;
+         => victim == 0 || victim == 6 ? 0 : 1000 * victim - attacker;
 
     // Scoring algorithm using MVVLVA
     // Taking into account the best move found from the previous search
     private Move[] GetOrderedMoves(Move hashMove, bool onlyCaptures)
         => board.GetLegalMoves(onlyCaptures).OrderByDescending(move =>
         GetMVV_LVA((int)move.CapturePieceType, (int)move.MovePieceType) +
-        (move == hashMove ? 100 : 0)).ToArray();
+        (move == hashMove ? 9000 : 0) +
+        historyHeuristics[board.IsWhiteToMove ? 1 : 0, move.StartSquare.Index, move.TargetSquare.Index])
+        .ToArray();
 
     //
     // Evaluation
