@@ -2,40 +2,6 @@
 using System;
 using System.Linq;
 
-<<<<<<< HEAD
-// TODO: MOST IMPORTANT: Null move pruning
-// TODO: MOST IMPORTANT: Quiescence search
-// TODO: King safety
-// TODO: Check extensions
-// TODO: Can probably optimize MVV_LVA with a simple mathematical function
-// TODO: Reimplement killer moves with more efficiency
-
-public class MyBot : IChessBot
-{
-    TranspositionTable transpositionTable = new();
-
-    // 2 is the number of killer moves
-    // 12 as a placeholder max ply value
-    Move[,] killerMoves = new Move[2, 12];
-
-    // None, Pawn, Knight, Bishop, Rook, Queen, King 
-    private readonly int[] PieceValues = { 0, 100, 320, 320, 500, 900, 0 };
-
-    // MVV_LVA [victim - 1, attacker - 1]
-    private readonly int[,] MVV_LVA =
-    {
-        // When accessing, since none is not an opiton, use victim - 1 and attacker - 1 since pawns are indexed at 0
-        // Also exclude kings from being the victim because they cannot be captured
-        { 15, 14, 13, 12, 11, 10 }, // victim P, attacker P, N, B, R, Q, K
-        { 25, 24, 23, 22, 21, 20 }, // victim N, attacker P, N, B, R, Q, K
-        { 35, 34, 33, 32, 31, 30 }, // victim B, attacker P, N, B, R, Q, K
-        { 45, 44, 43, 42, 41, 40 }, // victim R, attacker P, N, B, R, Q, K
-        { 55, 54, 53, 52, 51, 50 }, // victim Q, attacker P, N, B, R, Q, K
-    };
-
-    private int initialSearchPly;
-
-=======
 // TODO: Most Important: Combine PVS and QSearch into 1 function
 // TODO: Most Important: Experiment with a larger TT size to improve bot and hopefully fix PVS as well
 // TODO: Most Important: Setup that faster testing environment that everybody seems to have
@@ -51,7 +17,6 @@ public class MyBot : IChessBot
 
 public class MyBot : IChessBot
 {
->>>>>>> 04ec998
     private int searchMaxTime;
     private Timer searchTimer;
 
@@ -68,13 +33,8 @@ public class MyBot : IChessBot
 
     public Move Think(Board newBoard, Timer timer)
     {
-<<<<<<< HEAD
-        initialSearchPly = board.PlyCount;
-        Move[] moves = OrderMoves(board, board.GetLegalMoves());
-=======
         // Cache the board to save precious tokens
         board = newBoard;
->>>>>>> 04ec998
 
         // Reset history heuristics
         historyHeuristics = new int[2, 64, 64];
@@ -84,60 +44,8 @@ public class MyBot : IChessBot
         // searchMaxTime = 60000;
         searchTimer = timer;
 
-<<<<<<< HEAD
-        // No max depth, keep going until time limit is reached
-        for (int depth = 1; ; depth++)
-            foreach (Move move in moves)
-            {
-                board.MakeMove(move);
-                int moveScore = -Negamax(board, depth, -9999999, 9999999, board.IsWhiteToMove ? 1 : -1);
-                board.UndoMove(move);
-
-                // Place this after the negamax in case we ran out of time during the negamax search
-                if (OutOfTime)
-                    return bestMove;
-
-                if (moveScore > bestScore)
-                {
-                    bestScore = moveScore;
-                    bestMove = move;
-                }
-            }
-    }
-
-    private Move[] OrderMoves(Board board, Move[] moves)
-        => moves.OrderByDescending(move => ScoreMove(board, move)).ToArray();
-
-    private int ScoreMove(Board board, Move move)
-    {
-        if (move.CapturePieceType != PieceType.None)
-            // MVV_LVA_Offset = int.MaxValue - 256
-            // Or 2147483391
-            return 2147483391 + MVV_LVA[(int)move.CapturePieceType - 1, (int)move.MovePieceType - 1];
-        else
-            for (int n = 0; n < 2; n++)
-                if (move == killerMoves[n, board.PlyCount - initialSearchPly])
-                    // If killer move matches at spot 0, we'll end up with
-                    // MVV_LVA_Offset - 10, the second would be MVV_LVA_Offset - 20
-                    // This will always place killer moves just below captures
-                    return 2147483391 - ((n + 1) * 10);
-        return 0;
-    }
-
-    private int Negamax(Board board, int depth, int alpha, int beta, int colour)
-    {
-        if (OutOfTime)
-            return 0;
-
-        int originalAlpha = alpha;
-
-        // Transposition table lookup
-        PositionInfo position = transpositionTable.Lookup(board.ZobristKey);
-        if (position.IsValid && position.depthChecked >= depth)
-=======
         // Progressively increase search depth, starting from 2
         for (int depth = 2; ;)
->>>>>>> 04ec998
         {
             // Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms");
 
@@ -312,46 +220,14 @@ public class MyBot : IChessBot
             bestValue = Math.Max(bestValue, eval);
             alpha = Math.Max(alpha, bestValue);
             if (alpha >= beta)
-            {
-                if (move.CapturePieceType == PieceType.None)
-                    StoreKillerMove(move, board.PlyCount - initialSearchPly);
                 break;
-            }
         }
         return bestValue;
     }
 
-<<<<<<< HEAD
-    private void StoreKillerMove(Move move, int searchPly)
-    {
-        Move firstKiller = killerMoves[0, searchPly];
-
-        // Don't store the same killer moves
-        if (firstKiller != move)
-        {
-            // 2: Hardcoded max number of killer moves
-            // Shift all moves one index upwards
-            for (int i = 1; i < 2; i++)
-            {
-                Move previous = killerMoves[i - 1, searchPly];
-                killerMoves[i, searchPly] = previous;
-            }
-
-            // Add the new killer move in the first spot
-            killerMoves[0, searchPly] = move;
-        }
-    }
-
-    // => instead of return { }
-    // because it saves one token
-    private int EvaluateMaterial(Board board)
-        => board.GetAllPieceLists()
-            .Sum(list => PieceValues[(int)list.TypeOfPieceInList] * list.Count * (list.IsWhitePieceList ? 1 : -1));
-=======
     //
     // Move Ordering
     //
->>>>>>> 04ec998
 
     int[,,] historyHeuristics;
 
