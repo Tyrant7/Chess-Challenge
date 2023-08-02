@@ -35,7 +35,7 @@ namespace ChessChallenge.Example
             // Progressively increase search depth, starting from 2
             for (int depth = 2; ;)
             {
-                // Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms");
+                Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms");
 
                 PVS(depth++, -9999999, 9999999, 0);
 
@@ -113,10 +113,8 @@ namespace ChessChallenge.Example
                     return entry.Score;
             }
 
-            // TODO: Test this with the fixed PVS against fixed PVS without NMP
             // NULL move pruning
             // If this node is NOT part of the PV
-            /*
             if (beta - alpha <= 1 && depth > 3 && allowNull && board.TrySkipTurn())
             {
                 int eval = -PVS(depth - 2, -beta, 1 - beta, searchPly + 1, false);
@@ -126,7 +124,6 @@ namespace ChessChallenge.Example
                 if (eval >= beta)
                     return eval;
             }
-            */
 
             // Using var to save a single token
             var moves = GetOrderedMoves(entry.BestMove, false);
@@ -260,7 +257,7 @@ namespace ChessChallenge.Example
         75502243563200070682362835182m, 78896921543467230670583692029m, 2489164206166677455700101373m, 4338830174078735659125311481m, 4960199192571758553533648130m, 3420013420025511569771334658m, 1557077491473974933188251927m, 77376040767919248347203368440m,
         73949978050619586491881614568m, 77043619187199676893167803647m, 1212557245150259869494540530m, 3081561358716686153294085872m, 3392217589357453836837847030m, 1219782446916489227407330320m, 78580145051212187267589731866m, 75798434925965430405537592305m,
         68369566912511282590874449920m, 72396532057599326246617936384m, 75186737388538008131054524416m, 77027917484951889231108827392m, 73655004947793353634062267392m, 76417372019396591550492896512m, 74568981255592060493492515584m, 70529879645288096380279255040m,
-        };
+    };
 
         private readonly int[][] UnpackedPestoTables;
 
@@ -319,8 +316,8 @@ namespace ChessChallenge.Example
                     board.ZobristKey,
                     bestMove,
                     score,
-                    depth,
-                    flag);
+                    (byte)depth,
+                    (sbyte)flag);
         }
 
         // public enum Flag
@@ -330,7 +327,7 @@ namespace ChessChallenge.Example
         //    -1 = Lowerbound,
         //     2 = Upperbound
         // }
-        private record struct TTEntry(ulong Hash, Move BestMove, int Score, int Depth, int Flag);
+        private record struct TTEntry(ulong Hash, Move BestMove, int Score, byte Depth, sbyte Flag);
 
         #endregion
     }

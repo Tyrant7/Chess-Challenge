@@ -113,6 +113,17 @@ namespace ChessChallenge.Application
             NotifyTurnToMove();
         }
 
+        public static API.IChessBot? CreateBot(PlayerType type)
+        {
+            return type switch
+            {
+                PlayerType.MyBot => new MyBot(),
+                PlayerType.EvilBot => new EvilBot(),
+                // If you have other bot types, you can add them here as well
+                _ => null
+            };
+        }
+
         void BotThinkerThread()
         {
             int threadID = gameID;

@@ -3,15 +3,12 @@ using System;
 using System.Linq;
 
 // TODO: Most Important: Combine PVS and QSearch into 1 function
-// TODO: Most Important: Experiment with a larger TT size to improve bot and hopefully fix PVS as well
-// TODO: Most Important: Setup that faster testing environment that everybody seems to have
-// TODO: Most Important: Implement history heuristic with piece-to
+// TODO: Most Important: Change history heuristics to Piece -> Target rather than From -> To
 
 // Heuristics
 // TODO: Killer moves
 // TODO: Late move reductions
 // TODO: Passed pawn evaluation
-// TODO: Null move pruning
 // TODO: Check and promotion extensions
 // TODO: Experiment with new sorting techniques for moves
 
@@ -37,11 +34,10 @@ public class MyBot : IChessBot
         board = newBoard;
 
         // Reset history heuristics
-        historyHeuristics = new int[2, 64, 64];
+        historyHeuristics = new int[2, 7, 64];
 
         // 1/30th of our remaining time, split among all of the moves
         searchMaxTime = timer.MillisecondsRemaining / 30;
-        searchMaxTime = 800000;
         searchTimer = timer;
 
         // Progressively increase search depth, starting from 2
@@ -169,7 +165,7 @@ public class MyBot : IChessBot
                 if (alpha >= beta)
                 {
                     if (!move.IsCapture)
-                        historyHeuristics[board.IsWhiteToMove ? 1 : 0, move.StartSquare.Index, move.TargetSquare.Index] += depth * depth;
+                        historyHeuristics[board.IsWhiteToMove ? 1 : 0, (int)move.MovePieceType, move.TargetSquare.Index] += depth * depth;
 
                     TTInsert(move, eval, depth, -1);
                     return eval;
@@ -243,7 +239,7 @@ public class MyBot : IChessBot
             (move == hashMove ? 9000 : 0) +
 
             // History heuristic
-            historyHeuristics[board.IsWhiteToMove ? 1 : 0, move.StartSquare.Index, move.TargetSquare.Index];
+            historyHeuristics[board.IsWhiteToMove ? 1 : 0, (int)move.MovePieceType, move.TargetSquare.Index];
         }).ToArray();
 
     //
