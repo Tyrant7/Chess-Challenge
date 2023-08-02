@@ -2,8 +2,9 @@
 using System;
 using System.Linq;
 
-// TODO: Most Important: Combine PVS and QSearch into 1 function
 // TODO: Tune NMP (and experiment with subtracting depth / 6)
+// TODO: Test NMP with only allowing one NullMove per branch (simply pass allowNull instead of true from PVS)
+// TODO: Try swapping out the draw and checkmate logic to be more concise and make the bot faster
 
 // Heuristics
 // TODO: Static move pruning
@@ -23,10 +24,6 @@ public class MyBot : IChessBot
                               TTRetrieve.BestMove != Move.NullMove;
 
     Board board;
-
-    //
-    // Search
-    //
 
     public Move Think(Board newBoard, Timer timer)
     {
@@ -61,6 +58,9 @@ public class MyBot : IChessBot
         }
     }
 
+    #region Search
+
+    // This method doubles as our PVS and QSearch in order to save tokens
     private int PVS(int depth, int alpha, int beta, int searchPly, bool allowNull = true)
     {
         bool inQSearch = depth <= 0;
@@ -134,7 +134,7 @@ public class MyBot : IChessBot
         var moves = inQSearch ? GetOrderedMoves(Move.NullMove, !board.IsInCheck()) : 
                                 GetOrderedMoves(TTRetrieve.BestMove, false);
 
-        Move bestMove = moves[0];
+        Move bestMove = inQSearch ? Move.NullMove : moves[0];
         bool searchForPV = true;
         foreach (Move move in moves)
         {
@@ -183,9 +183,9 @@ public class MyBot : IChessBot
         return alpha;
     }
 
-    //
-    // Move Ordering
-    //
+    #endregion
+
+    #region MoveOrdering
 
     int[,,] historyHeuristics;
 
@@ -207,9 +207,7 @@ public class MyBot : IChessBot
             historyHeuristics[board.IsWhiteToMove ? 1 : 0, (int)move.MovePieceType, move.TargetSquare.Index];
         }).ToArray();
 
-    //
-    // Evaluation
-    //
+    #endregion
 
     #region Evaluation
 

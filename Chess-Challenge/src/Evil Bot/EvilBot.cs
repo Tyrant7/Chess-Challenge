@@ -16,10 +16,6 @@ namespace ChessChallenge.Example
 
         Board board;
 
-        //
-        // Search
-        //
-
         public Move Think(Board newBoard, Timer timer)
         {
             // Cache the board to save precious tokens
@@ -35,7 +31,7 @@ namespace ChessChallenge.Example
             // Progressively increase search depth, starting from 2
             for (int depth = 2; ;)
             {
-                Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms");
+                Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms"); // #DEBUG
 
                 PVS(depth++, -9999999, 9999999, 0);
 
@@ -51,35 +47,15 @@ namespace ChessChallenge.Example
                 if (OutOfTime)
                     return TTRetrieve.BestMove;
             }
-
-            // DEBUG
-            /*
-            board = newBoard;
-
-            int startMS = timer.MillisecondsElapsedThisTurn;
-            for (int i = 0; i < 500000; i++)
-            {
-                MyEvaluate();
-            }
-
-            Console.WriteLine("My evaluation: " + MyEvaluate());
-            Console.WriteLine(timer.MillisecondsElapsedThisTurn - startMS + "ms to evaluate using my method");
-
-            startMS = timer.MillisecondsElapsedThisTurn;
-            for (int i = 0; i < 500000; i++)
-            {
-                Evaluate();
-            }
-
-            Console.WriteLine("JW's evaluation: " + Evaluate());
-            Console.WriteLine(timer.MillisecondsElapsedThisTurn - startMS + "ms to evaluate using JW's method");
-
-            return newBoard.GetLegalMoves()[0];
-            */
         }
 
+        #region Search
+
+        // This method doubles as our PVS and QSearch in order to save tokens
         private int PVS(int depth, int alpha, int beta, int searchPly, bool allowNull = true)
         {
+            bool inQSearch = depth <= 0;
+
             // Evaluate the gamestate
             if (board.IsDraw())
                 // Discourage draws slightly
@@ -88,61 +64,79 @@ namespace ChessChallenge.Example
                 // Checkmate = 99999
                 return -(99999 - searchPly);
 
-            // Check extensions
-            if (board.IsInCheck())
-                depth++;
-
-            // Terminal node, start QSearch
-            if (depth <= 0)
-                return QuiescenceSearch(alpha, beta, searchPly + 1);
-
-            // Transposition table lookup -> Found a valid entry for this position
-            if (TTRetrieve.Hash == board.ZobristKey && searchPly > 0 &&
-                TTRetrieve.Depth >= depth)
-            {
-                // Exact
-                if (TTRetrieve.Flag == 1)
-                    return TTRetrieve.Score;
-                // Lowerbound
-                if (TTRetrieve.Flag == -1)
-                    alpha = Math.Max(alpha, TTRetrieve.Score);
-                // Upperbound
-                else
-                    beta = Math.Min(beta, TTRetrieve.Score);
-
-                if (alpha >= beta)
-                    return TTRetrieve.Score;
-            }
-
-            // NULL move pruning
-            // If this node is NOT part of the PV
-            if (beta - alpha <= 1 && depth > 3 && allowNull && board.TrySkipTurn())
-            {
-                int eval = -PVS(depth - 2, -beta, 1 - beta, searchPly + 1, false);
-                board.UndoSkipTurn();
-
-                // Failed high on the null move
-                if (eval >= beta)
-                    return eval;
-            }
-
-            // Using var to save a single token
-            var moves = GetOrderedMoves(TTRetrieve.BestMove, false);
-
+            // Define best eval all the way up here to generate the standing pattern
             int bestEval = -9999999;
-            Move bestMove = moves[0];
+            if (inQSearch)
+            {
+                // Determine if quiescence search should be continued
+                bestEval = Evaluate();
 
+                alpha = Math.Max(alpha, bestEval);
+                if (alpha >= beta)
+                    return bestEval;
+            }
+            // No extensions, NMP, or TT in QSearch
+            else
+            {
+                // Check extensions
+                if (board.IsInCheck())
+                    depth++;
+
+                // IMPORTANT NOTE: Increment the value of searchPly after comparison to save tokens since blocks below this do not care
+                // about the value and are simply passing searchPly + 1 to the next iteration
+
+                // Transposition table lookup -> Found a valid entry for this position
+                if (TTRetrieve.Hash == board.ZobristKey && searchPly++ > 0 &&
+                    TTRetrieve.Depth >= depth)
+                {
+                    // Cache this value to save tokens by not referencing using the . operator
+                    int score = TTRetrieve.Score;
+
+                    // Exact
+                    if (TTRetrieve.Flag == 1)
+                        return score;
+
+                    // Lowerbound
+                    if (TTRetrieve.Flag == -1)
+                        alpha = Math.Max(alpha, score);
+                    // Upperbound
+                    else
+                        beta = Math.Min(beta, score);
+
+                    if (alpha >= beta)
+                        return score;
+                }
+
+                // NULL move pruning
+                // If this node is NOT part of the PV
+                if (beta - alpha <= 1 && depth > 3 && allowNull && board.TrySkipTurn())
+                {
+                    int eval = -PVS(depth - 2, -beta, 1 - beta, searchPly, false);
+                    board.UndoSkipTurn();
+
+                    // Failed high on the null move
+                    if (eval >= beta)
+                        return eval;
+                }
+            }
+
+            // Generate appropriate moves depending on whether we're in QSearch
+            // Using var to save a single token
+            var moves = inQSearch ? GetOrderedMoves(Move.NullMove, !board.IsInCheck()) :
+                                    GetOrderedMoves(TTRetrieve.BestMove, false);
+
+            Move bestMove = inQSearch ? Move.NullMove : moves[0];
             bool searchForPV = true;
             foreach (Move move in moves)
             {
                 board.MakeMove(move);
 
                 // Always fully search the first child, search the rest with a null window
-                int eval = -PVS(depth - 1, searchForPV ? -beta : -alpha - 1, -alpha, searchPly + 1);
+                int eval = -PVS(depth - 1, searchForPV ? -beta : -alpha - 1, -alpha, searchPly);
 
                 // Found a move that can raise alpha, do a research
                 if (!searchForPV && alpha < eval && eval < beta)
-                    eval = -PVS(depth - 1, -beta, -alpha, searchPly + 1);
+                    eval = -PVS(depth - 1, -beta, -alpha, searchPly);
 
                 board.UndoMove(move);
 
@@ -157,63 +151,32 @@ namespace ChessChallenge.Example
 
                     if (alpha >= beta)
                     {
-                        if (!move.IsCapture)
-                            historyHeuristics[board.IsWhiteToMove ? 1 : 0, (int)move.MovePieceType, move.TargetSquare.Index] += depth * depth;
+                        if (!inQSearch)
+                        {
+                            if (!move.IsCapture)
+                                historyHeuristics[board.IsWhiteToMove ? 1 : 0, (int)move.MovePieceType, move.TargetSquare.Index] += depth * depth;
 
-                        TTInsert(move, eval, depth, -1);
+                            TTInsert(move, eval, depth, -1);
+                        }
                         return eval;
                     }
                 }
-                searchForPV = false;
+
+                // Will set it to false if in a regular search,
+                // but in QSearch will always search every node as if it's first
+                searchForPV = inQSearch;
             }
 
             // Transposition table insertion
-            TTInsert(bestMove, bestEval, depth, bestEval <= alpha ? 2 : 1);
+            if (!inQSearch)
+                TTInsert(bestMove, bestEval, depth, bestEval <= alpha ? 2 : 1);
 
             return alpha;
         }
 
-        // Quiescence search with help from
-        // https://stackoverflow.com/questions/48846642/is-there-something-wrong-with-my-quiescence-search
-        private int QuiescenceSearch(int alpha, int beta, int searchPly)
-        {
-            if (OutOfTime)
-                return 0;
+        #endregion
 
-            // Evaluate the gamestate
-            if (board.IsDraw())
-                // Discourage draws slightly
-                return 0;
-            if (board.IsInCheckmate())
-                // Checkmate = 99999
-                return -(99999 - searchPly);
-
-            // Determine if quiescence search should be continued
-            int bestValue = Evaluate();
-
-            alpha = Math.Max(alpha, bestValue);
-            if (alpha >= beta)
-                return bestValue;
-
-            // If in check, look into all moves, otherwise just captures
-            // Also no hash move for Quiescence search
-            foreach (Move move in GetOrderedMoves(Move.NullMove, !board.IsInCheck()))
-            {
-                board.MakeMove(move);
-                int eval = -QuiescenceSearch(-beta, -alpha, searchPly + 1);
-                board.UndoMove(move);
-
-                bestValue = Math.Max(bestValue, eval);
-                alpha = Math.Max(alpha, bestValue);
-                if (alpha >= beta)
-                    break;
-            }
-            return bestValue;
-        }
-
-        //
-        // Move Ordering
-        //
+        #region MoveOrdering
 
         int[,,] historyHeuristics;
 
@@ -235,9 +198,7 @@ namespace ChessChallenge.Example
                 historyHeuristics[board.IsWhiteToMove ? 1 : 0, (int)move.MovePieceType, move.TargetSquare.Index];
             }).ToArray();
 
-        //
-        // Evaluation
-        //
+        #endregion
 
         #region Evaluation
 
