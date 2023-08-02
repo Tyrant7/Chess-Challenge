@@ -3,13 +3,13 @@ using System;
 using System.Linq;
 
 // TODO: Most Important: Combine PVS and QSearch into 1 function
+// TODO: Tune NMP (and experiment with subtracting depth / 6)
 
 // Heuristics
 // TODO: Static move pruning
 // TODO: Killer moves
 // TODO: Late move reductions
 // TODO: Passed pawn evaluation
-// TODO: Check and promotion extensions
 // TODO: Experiment with new sorting techniques for moves
 
 public class MyBot : IChessBot
@@ -167,11 +167,8 @@ public class MyBot : IChessBot
     // https://stackoverflow.com/questions/48846642/is-there-something-wrong-with-my-quiescence-search
     private int QuiescenceSearch(int alpha, int beta, int searchPly)
     {
-        if (OutOfTime)
-            return 0;
-
         // Evaluate the gamestate
-        if (board.IsDraw())
+        if (OutOfTime || board.IsDraw())
             // Discourage draws slightly
             return 0;
         if (board.IsInCheckmate())
