@@ -11,8 +11,8 @@ namespace ChessChallenge.Example
 
         // Return true if out of time AND a valid move has been found
         private bool OutOfTime => searchTimer.MillisecondsElapsedThisTurn > searchMaxTime &&
-                                  TTRetrieve().Hash == board.ZobristKey &&
-                                  TTRetrieve().BestMove != Move.NullMove;
+                                  TTRetrieve.Hash == board.ZobristKey &&
+                                  TTRetrieve.BestMove != Move.NullMove;
 
         Board board;
 
@@ -49,7 +49,7 @@ namespace ChessChallenge.Example
                 */
 
                 if (OutOfTime)
-                    return TTRetrieve().BestMove;
+                    return TTRetrieve.BestMove;
             }
 
             // DEBUG
@@ -92,25 +92,22 @@ namespace ChessChallenge.Example
             if (depth <= 0)
                 return QuiescenceSearch(alpha, beta, searchPly + 1);
 
-            // Transposition table lookup
-            TTEntry entry = TTRetrieve();
-
-            // Found a valid entry for this position
-            if (entry.Hash == board.ZobristKey && searchPly > 0 &&
-                entry.Depth >= depth)
+            // Transposition table lookup -> Found a valid entry for this position
+            if (TTRetrieve.Hash == board.ZobristKey && searchPly > 0 &&
+                TTRetrieve.Depth >= depth)
             {
                 // Exact
-                if (entry.Flag == 1)
-                    return entry.Score;
+                if (TTRetrieve.Flag == 1)
+                    return TTRetrieve.Score;
                 // Lowerbound
-                if (entry.Flag == -1)
-                    alpha = Math.Max(alpha, entry.Score);
+                if (TTRetrieve.Flag == -1)
+                    alpha = Math.Max(alpha, TTRetrieve.Score);
                 // Upperbound
                 else
-                    beta = Math.Min(beta, entry.Score);
+                    beta = Math.Min(beta, TTRetrieve.Score);
 
                 if (alpha >= beta)
-                    return entry.Score;
+                    return TTRetrieve.Score;
             }
 
             // NULL move pruning
@@ -126,7 +123,7 @@ namespace ChessChallenge.Example
             }
 
             // Using var to save a single token
-            var moves = GetOrderedMoves(entry.BestMove, false);
+            var moves = GetOrderedMoves(TTRetrieve.BestMove, false);
 
             int bestEval = -9999999;
             Move bestMove = moves[0];
@@ -306,12 +303,12 @@ namespace ChessChallenge.Example
         // Very lowballed to make sure I don't go over
         private readonly TTEntry[] transpositionTable = new TTEntry[0x400000];
 
-        private TTEntry TTRetrieve()
+        private TTEntry TTRetrieve
             => transpositionTable[board.ZobristKey & 0x3FFFFF];
 
         private void TTInsert(Move bestMove, int score, int depth, int flag)
         {
-            if (depth > 1 && depth > TTRetrieve().Depth)
+            if (depth > TTRetrieve.Depth)
                 transpositionTable[board.ZobristKey & 0x3FFFFF] = new TTEntry(
                     board.ZobristKey,
                     bestMove,

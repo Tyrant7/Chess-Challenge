@@ -3,7 +3,6 @@ using System;
 using System.Linq;
 
 // TODO: Most Important: Combine PVS and QSearch into 1 function
-// TODO: Most Important: Change history heuristics to Piece -> Target rather than From -> To
 
 // Heuristics
 // TODO: Killer moves
@@ -43,7 +42,7 @@ public class MyBot : IChessBot
         // Progressively increase search depth, starting from 2
         for (int depth = 2; ;)
         {
-            Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms");
+            Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms"); // #DEBUG
 
             PVS(depth++, -9999999, 9999999, 0);
 
@@ -59,31 +58,6 @@ public class MyBot : IChessBot
             if (OutOfTime)
                 return TTRetrieve.BestMove;
         }
-
-        // DEBUG
-        /*
-        board = newBoard;
-
-        int startMS = timer.MillisecondsElapsedThisTurn;
-        for (int i = 0; i < 500000; i++)
-        {
-            MyEvaluate();
-        }
-
-        Console.WriteLine("My evaluation: " + MyEvaluate());
-        Console.WriteLine(timer.MillisecondsElapsedThisTurn - startMS + "ms to evaluate using my method");
-
-        startMS = timer.MillisecondsElapsedThisTurn;
-        for (int i = 0; i < 500000; i++)
-        {
-            Evaluate();
-        }
-
-        Console.WriteLine("JW's evaluation: " + Evaluate());
-        Console.WriteLine(timer.MillisecondsElapsedThisTurn - startMS + "ms to evaluate using JW's method");
-
-        return newBoard.GetLegalMoves()[0];
-        */
     }
 
     private int PVS(int depth, int alpha, int beta, int searchPly, bool allowNull = true)
@@ -95,6 +69,9 @@ public class MyBot : IChessBot
         if (board.IsInCheckmate())
             // Checkmate = 99999
             return -(99999 - searchPly);
+
+        if (board.IsInCheck())
+            depth++;
 
         // Terminal node, start QSearch
         if (depth <= 0)
