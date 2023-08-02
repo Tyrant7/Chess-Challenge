@@ -26,7 +26,7 @@ namespace ChessChallenge.Example
             board = newBoard;
 
             // Reset history heuristics
-            historyHeuristics = new int[2, 64, 64];
+            historyHeuristics = new int[2, 7, 64];
 
             // 1/30th of our remaining time, split among all of the moves
             searchMaxTime = timer.MillisecondsRemaining / 30;
@@ -157,7 +157,7 @@ namespace ChessChallenge.Example
                     if (alpha >= beta)
                     {
                         if (!move.IsCapture)
-                            historyHeuristics[board.IsWhiteToMove ? 1 : 0, move.StartSquare.Index, move.TargetSquare.Index] += depth * depth;
+                            historyHeuristics[board.IsWhiteToMove ? 1 : 0, (int)move.MovePieceType, move.TargetSquare.Index] += depth * depth;
 
                         TTInsert(move, eval, depth, -1);
                         return eval;
@@ -231,7 +231,7 @@ namespace ChessChallenge.Example
                 (move == hashMove ? 9000 : 0) +
 
                 // History heuristic
-                historyHeuristics[board.IsWhiteToMove ? 1 : 0, move.StartSquare.Index, move.TargetSquare.Index];
+                historyHeuristics[board.IsWhiteToMove ? 1 : 0, (int)move.MovePieceType, move.TargetSquare.Index];
             }).ToArray();
 
         //
@@ -316,8 +316,8 @@ namespace ChessChallenge.Example
                     board.ZobristKey,
                     bestMove,
                     score,
-                    (byte)depth,
-                    (sbyte)flag);
+                    depth,
+                    flag);
         }
 
         // public enum Flag
@@ -327,7 +327,7 @@ namespace ChessChallenge.Example
         //    -1 = Lowerbound,
         //     2 = Upperbound
         // }
-        private record struct TTEntry(ulong Hash, Move BestMove, int Score, byte Depth, sbyte Flag);
+        private record struct TTEntry(ulong Hash, Move BestMove, int Score, int Depth, int Flag);
 
         #endregion
     }

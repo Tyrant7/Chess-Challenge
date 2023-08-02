@@ -319,7 +319,7 @@ public class MyBot : IChessBot
 
     private void TTInsert(Move bestMove, int score, int depth, int flag)
     {
-        if (depth > 1 && depth > TTRetrieve().Depth)
+        if (depth > TTRetrieve().Depth)
             transpositionTable[board.ZobristKey & 0x3FFFFF] = new TTEntry(
                 board.ZobristKey,
                 bestMove,
