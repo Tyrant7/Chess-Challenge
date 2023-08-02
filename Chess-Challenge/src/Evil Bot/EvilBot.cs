@@ -88,6 +88,10 @@ namespace ChessChallenge.Example
                 // Checkmate = 99999
                 return -(99999 - searchPly);
 
+            // Check extensions
+            if (board.IsInCheck())
+                depth++;
+
             // Terminal node, start QSearch
             if (depth <= 0)
                 return QuiescenceSearch(alpha, beta, searchPly + 1);

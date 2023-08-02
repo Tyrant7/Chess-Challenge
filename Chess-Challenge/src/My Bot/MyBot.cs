@@ -5,6 +5,7 @@ using System.Linq;
 // TODO: Most Important: Combine PVS and QSearch into 1 function
 
 // Heuristics
+// TODO: Static move pruning
 // TODO: Killer moves
 // TODO: Late move reductions
 // TODO: Passed pawn evaluation
@@ -70,36 +71,44 @@ public class MyBot : IChessBot
             // Checkmate = 99999
             return -(99999 - searchPly);
 
+        // Check extensions
         if (board.IsInCheck())
             depth++;
 
         // Terminal node, start QSearch
         if (depth <= 0)
-            return QuiescenceSearch(alpha, beta, searchPly + 1);
+            return QuiescenceSearch(alpha, beta, searchPly++);
+
+        // IMPORTANT NOTE: Increment the value of searchPly after comparison to save tokens since blocks below this do not care
+        // about the value and are simply passing searchPly + 1 to the next iteration
 
         // Transposition table lookup -> Found a valid entry for this position
-        if (TTRetrieve.Hash == board.ZobristKey && searchPly > 0 &&
+        if (TTRetrieve.Hash == board.ZobristKey && searchPly++ > 0 &&
             TTRetrieve.Depth >= depth)
         {
+            // Cache this value to save tokens by not referencing using the . operator
+            int score = TTRetrieve.Score;
+
             // Exact
             if (TTRetrieve.Flag == 1)
-                return TTRetrieve.Score;
+                return score;
+
             // Lowerbound
             if (TTRetrieve.Flag == -1)
-                alpha = Math.Max(alpha, TTRetrieve.Score);
+                alpha = Math.Max(alpha, score);
             // Upperbound
             else
-                beta = Math.Min(beta, TTRetrieve.Score);
+                beta = Math.Min(beta, score);
 
             if (alpha >= beta)
-                return TTRetrieve.Score;
+                return score;
         }
 
         // NULL move pruning
         // If this node is NOT part of the PV
         if (beta - alpha <= 1 && depth > 3 && allowNull && board.TrySkipTurn())
         {
-            int eval = -PVS(depth - 2, -beta, 1 - beta, searchPly + 1, false);
+            int eval = -PVS(depth - 2, -beta, 1 - beta, searchPly, false);
             board.UndoSkipTurn();
 
             // Failed high on the null move
@@ -119,11 +128,11 @@ public class MyBot : IChessBot
             board.MakeMove(move);
 
             // Always fully search the first child, search the rest with a null window
-            int eval = -PVS(depth - 1, searchForPV ? -beta : -alpha - 1, -alpha, searchPly + 1);
+            int eval = -PVS(depth - 1, searchForPV ? -beta : -alpha - 1, -alpha, searchPly);
 
             // Found a move that can raise alpha, do a research
             if (!searchForPV && alpha < eval && eval < beta)
-                eval = -PVS(depth - 1, -beta, -alpha, searchPly + 1);
+                eval = -PVS(depth - 1, -beta, -alpha, searchPly);
 
             board.UndoMove(move);
 
@@ -181,10 +190,9 @@ public class MyBot : IChessBot
         foreach (Move move in GetOrderedMoves(Move.NullMove, !board.IsInCheck()))
         {
             board.MakeMove(move);
-            int eval = -QuiescenceSearch(-beta, -alpha, searchPly + 1);
+            bestValue = Math.Max(bestValue, -QuiescenceSearch(-beta, -alpha, searchPly + 1));
             board.UndoMove(move);
 
-            bestValue = Math.Max(bestValue, eval);
             alpha = Math.Max(alpha, bestValue);
             if (alpha >= beta)
                 break;
