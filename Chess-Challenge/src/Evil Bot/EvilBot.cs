@@ -54,7 +54,10 @@ namespace ChessChallenge.Example
         // This method doubles as our PVS and QSearch in order to save tokens
         private int PVS(int depth, int alpha, int beta, int searchPly, bool allowNull = true)
         {
-            bool inQSearch = depth <= 0;
+            // Use this local function when updating alpha to save tokens
+            /*
+            void UpdateAlpha(int contender) => alpha = Math.Max(alpha, contender);
+            */
 
             // Evaluate the gamestate
             if (board.IsDraw())
@@ -63,6 +66,10 @@ namespace ChessChallenge.Example
             if (board.IsInCheckmate())
                 // Checkmate = 99999
                 return -(99999 - searchPly);
+
+            // Declare some reused variables after gamestate
+            bool inQSearch = depth <= 0;
+            bool inCheck = board.IsInCheck();
 
             // Define best eval all the way up here to generate the standing pattern
             int bestEval = -9999999;
@@ -79,7 +86,7 @@ namespace ChessChallenge.Example
             else
             {
                 // Check extensions
-                if (board.IsInCheck())
+                if (inCheck)
                     depth++;
 
                 // IMPORTANT NOTE: Increment the value of searchPly after comparison to save tokens since blocks below this do not care
@@ -107,22 +114,51 @@ namespace ChessChallenge.Example
                         return score;
                 }
 
-                // NULL move pruning
                 // If this node is NOT part of the PV
-                if (beta - alpha <= 1 && depth > 3 && allowNull && board.TrySkipTurn())
+                if (beta - alpha <= 1)
                 {
-                    int eval = -PVS(depth - 2, -beta, 1 - beta, searchPly, false);
-                    board.UndoSkipTurn();
+                    if (depth < 3 && !inCheck)
+                    {
+                        // Static move pruning
+                        int staticEval = Evaluate();
 
-                    // Failed high on the null move
-                    if (eval >= beta)
-                        return eval;
+                        // Give ourselves a margin of 120 centipawns times depth.
+                        // If we're up by more than that margin, there's no point in
+                        // searching any further since our position is so good
+                        if (staticEval - 120 * depth >= beta)
+                            return staticEval - 120 * depth;
+                    }
+
+                    // NULL move pruning
+                    if (depth > 2 && allowNull && board.TrySkipTurn())
+                    {
+                        int eval = -PVS(depth - 3, -beta, 1 - beta, searchPly, false);
+                        board.UndoSkipTurn();
+
+                        // Failed high on the null move
+                        if (eval >= beta)
+                            return eval;
+                    }
+
+                    // Razoring - cut nodes near tips of branches
+                    /*
+                    if (depth <= 3 && !inCheck && allowNull)
+                    {
+                        int threshold = alpha - 300 - (depth - 1) * 60;
+                        if (Evaluate() < threshold)
+                        {
+                            int eval = -PVS(0, alpha, beta, searchPly);
+                            if (eval < threshold)
+                                return alpha;
+                        }
+                    }
+                    */
                 }
             }
 
             // Generate appropriate moves depending on whether we're in QSearch
             // Using var to save a single token
-            var moves = inQSearch ? GetOrderedMoves(Move.NullMove, !board.IsInCheck()) :
+            var moves = inQSearch ? GetOrderedMoves(Move.NullMove, !inCheck) :
                                     GetOrderedMoves(TTRetrieve.BestMove, false);
 
             Move bestMove = inQSearch ? Move.NullMove : moves[0];
@@ -176,7 +212,7 @@ namespace ChessChallenge.Example
 
         #endregion
 
-        #region MoveOrdering
+        #region Move Ordering
 
         int[,,] historyHeuristics;
 
