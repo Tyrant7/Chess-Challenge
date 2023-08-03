@@ -28,7 +28,7 @@ public class MyBot : IChessBot
         // Cache the board to save precious tokens
         board = newBoard;
 
-        // Reset history heuristics
+        // Reset history heuristics and killer moves
         historyHeuristics = new int[2, 7, 64];
 
         // 1/30th of our remaining time, split among all of the moves
@@ -124,22 +124,23 @@ public class MyBot : IChessBot
             // If this node is NOT part of the PV
             if (beta - alpha <= 1)
             {
+                int eval;
                 if (depth < 3 && !inCheck)
                 {
                     // Static move pruning
-                    int staticEval = Evaluate();
+                    eval = Evaluate();
 
                     // Give ourselves a margin of 120 centipawns times depth.
                     // If we're up by more than that margin, there's no point in
                     // searching any further since our position is so good
-                    if (staticEval - 120 * depth >= beta)
-                        return staticEval - 120 * depth;
+                    if (eval - 120 * depth >= beta)
+                        return eval - 120 * depth;
                 }
 
                 // NULL move pruning
                 if (depth > 2 && allowNull && board.TrySkipTurn())
                 {
-                    int eval = -PVS(depth - 3, -beta, 1 - beta, searchPly, false);
+                    eval = -PVS(depth - 3, -beta, 1 - beta, searchPly, false);
                     board.UndoSkipTurn();
 
                     // Failed high on the null move
@@ -154,7 +155,7 @@ public class MyBot : IChessBot
                     int threshold = alpha - 300 - (depth - 1) * 60;
                     if (Evaluate() < threshold)
                     {
-                        int eval = -PVS(0, alpha, beta, searchPly);
+                        eval = -PVS(0, alpha, beta, searchPly);
                         if (eval < threshold)
                             return alpha;
                     }
@@ -165,8 +166,8 @@ public class MyBot : IChessBot
 
         // Generate appropriate moves depending on whether we're in QSearch
         // Using var to save a single token
-        var moves = inQSearch ? GetOrderedMoves(Move.NullMove, !inCheck) : 
-                                GetOrderedMoves(TTRetrieve.BestMove, false);
+        var moves = inQSearch ? GetOrderedMoves(Move.NullMove, searchPly, !inCheck) : 
+                                GetOrderedMoves(TTRetrieve.BestMove, searchPly, false);
 
         Move bestMove = inQSearch ? Move.NullMove : moves[0];
         bool searchForPV = true;
@@ -192,15 +193,16 @@ public class MyBot : IChessBot
                 bestEval = eval;
                 alpha = Math.Max(eval, alpha);
 
+                // Cutoff
                 if (alpha >= beta)
                 {
-                    if (!inQSearch)
-                    {
-                        if (!move.IsCapture)
-                            historyHeuristics[board.IsWhiteToMove ? 1 : 0, (int)move.MovePieceType, move.TargetSquare.Index] += depth * depth;
+                    // Update history tables
+                    if (!move.IsCapture)
+                        historyHeuristics[board.IsWhiteToMove ? 1 : 0, (int)move.MovePieceType, move.TargetSquare.Index] += depth * depth;
 
+                    if (!inQSearch)
                         TTInsert(move, eval, depth, -1);
-                    }
+
                     return eval;
                 }
             }
@@ -225,7 +227,7 @@ public class MyBot : IChessBot
 
     // Scoring algorithm using MVVLVA
     // Taking into account the best move found from the previous search
-    private Move[] GetOrderedMoves(Move hashMove, bool onlyCaputures)
+    private Move[] GetOrderedMoves(Move hashMove, int searchPly, bool onlyCaputures)
         => board.GetLegalMoves(onlyCaputures).OrderByDescending(move =>
         {
             // Cache this here to save tokens
@@ -246,6 +248,8 @@ public class MyBot : IChessBot
     #region Evaluation
 
     private readonly int[] GamePhaseIncrement = { 0, 1, 1, 2, 4, 0 };
+
+    private readonly int[] KingSafetyPenalties = { 0, 50, 75, 90, 95, 99, 100, 100 };
 
     // None, Pawn, Knight, Bishop, Rook, Queen, King 
     private readonly short[] PieceValues = { 82, 337, 365, 477, 1025, 0, // Middlegame
@@ -284,18 +288,27 @@ public class MyBot : IChessBot
         int middlegame = 0, endgame = 0, gamephase = 0;
         foreach (bool sideToMove in new[] { true, false })
         {
-            // Initialize to the pawn bitboard
-            ulong mask = board.GetPieceBitboard(PieceType.Pawn, sideToMove);
+            ulong pieceAttacks = 0;
 
             // Start from the second bitboard and up since pawns have already been handled
-            for (int piece = 0, square; piece < 5; mask = board.GetPieceBitboard((PieceType)(++piece + 1), sideToMove))
+            for (int piece = 0, square; piece++ < 6; )
+            {
+                ulong mask = board.GetPieceBitboard((PieceType)(piece + 1), sideToMove);
                 while (mask != 0)
                 {
+                    // Gamephase, middlegame -> endgame
                     gamephase += GamePhaseIncrement[piece];
+
+                    // Material and square evaluation
                     square = BitboardHelper.ClearAndGetIndexOfLSB(ref mask) ^ (sideToMove ? 56 : 0);
                     middlegame += UnpackedPestoTables[square][piece];
                     endgame += UnpackedPestoTables[square][piece + 6];
+
+                    // Save piece attacks
+                    pieceAttacks |= BitboardHelper.GetPieceAttacks((PieceType)piece, new Square(square), board, sideToMove);
                 }
+            }
+            middlegame += KingSafetyPenalties[BitboardHelper.GetNumberOfSetBits(BitboardHelper.GetKingAttacks(board.GetKingSquare(!sideToMove)) & pieceAttacks)];
 
             middlegame = -middlegame;
             endgame = -endgame;

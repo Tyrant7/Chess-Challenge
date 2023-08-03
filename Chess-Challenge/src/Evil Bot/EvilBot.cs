@@ -185,15 +185,16 @@ namespace ChessChallenge.Example
                     bestEval = eval;
                     alpha = Math.Max(eval, alpha);
 
+                    // Cutoff
                     if (alpha >= beta)
                     {
-                        if (!inQSearch)
-                        {
-                            if (!move.IsCapture)
-                                historyHeuristics[board.IsWhiteToMove ? 1 : 0, (int)move.MovePieceType, move.TargetSquare.Index] += depth * depth;
+                        // Update history tables
+                        if (!move.IsCapture)
+                            historyHeuristics[board.IsWhiteToMove ? 1 : 0, (int)move.MovePieceType, move.TargetSquare.Index] += depth * depth;
 
+                        if (!inQSearch)
                             TTInsert(move, eval, depth, -1);
-                        }
+
                         return eval;
                     }
                 }
