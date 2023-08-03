@@ -249,8 +249,6 @@ public class MyBot : IChessBot
 
     private readonly int[] GamePhaseIncrement = { 0, 1, 1, 2, 4, 0 };
 
-    private readonly int[] KingSafetyPenalties = { 0, 50, 75, 90, 95, 99, 100, 100 };
-
     // None, Pawn, Knight, Bishop, Rook, Queen, King 
     private readonly short[] PieceValues = { 82, 337, 365, 477, 1025, 0, // Middlegame
                                              94, 281, 297, 512, 936, 0}; // Endgame
@@ -288,12 +286,10 @@ public class MyBot : IChessBot
         int middlegame = 0, endgame = 0, gamephase = 0;
         foreach (bool sideToMove in new[] { true, false })
         {
-            ulong pieceAttacks = 0;
-
             // Start from the second bitboard and up since pawns have already been handled
-            for (int piece = 0, square; piece++ < 6; )
+            for (int piece = -1, square; ++piece < 6; )
             {
-                ulong mask = board.GetPieceBitboard((PieceType)(piece + 1), sideToMove);
+                ulong mask = board.GetPieceBitboard((PieceType)piece + 1, sideToMove);
                 while (mask != 0)
                 {
                     // Gamephase, middlegame -> endgame
@@ -303,13 +299,8 @@ public class MyBot : IChessBot
                     square = BitboardHelper.ClearAndGetIndexOfLSB(ref mask) ^ (sideToMove ? 56 : 0);
                     middlegame += UnpackedPestoTables[square][piece];
                     endgame += UnpackedPestoTables[square][piece + 6];
-
-                    // Save piece attacks
-                    pieceAttacks |= BitboardHelper.GetPieceAttacks((PieceType)piece, new Square(square), board, sideToMove);
                 }
             }
-            middlegame += KingSafetyPenalties[BitboardHelper.GetNumberOfSetBits(BitboardHelper.GetKingAttacks(board.GetKingSquare(!sideToMove)) & pieceAttacks)];
-
             middlegame = -middlegame;
             endgame = -endgame;
         }

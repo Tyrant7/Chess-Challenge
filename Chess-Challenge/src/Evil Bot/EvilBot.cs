@@ -21,7 +21,7 @@ namespace ChessChallenge.Example
             // Cache the board to save precious tokens
             board = newBoard;
 
-            // Reset history heuristics
+            // Reset history heuristics and killer moves
             historyHeuristics = new int[2, 7, 64];
 
             // 1/30th of our remaining time, split among all of the moves
@@ -117,22 +117,23 @@ namespace ChessChallenge.Example
                 // If this node is NOT part of the PV
                 if (beta - alpha <= 1)
                 {
+                    int eval;
                     if (depth < 3 && !inCheck)
                     {
                         // Static move pruning
-                        int staticEval = Evaluate();
+                        eval = Evaluate();
 
                         // Give ourselves a margin of 120 centipawns times depth.
                         // If we're up by more than that margin, there's no point in
                         // searching any further since our position is so good
-                        if (staticEval - 120 * depth >= beta)
-                            return staticEval - 120 * depth;
+                        if (eval - 120 * depth >= beta)
+                            return eval - 120 * depth;
                     }
 
                     // NULL move pruning
                     if (depth > 2 && allowNull && board.TrySkipTurn())
                     {
-                        int eval = -PVS(depth - 3, -beta, 1 - beta, searchPly, false);
+                        eval = -PVS(depth - 3, -beta, 1 - beta, searchPly, false);
                         board.UndoSkipTurn();
 
                         // Failed high on the null move
@@ -147,7 +148,7 @@ namespace ChessChallenge.Example
                         int threshold = alpha - 300 - (depth - 1) * 60;
                         if (Evaluate() < threshold)
                         {
-                            int eval = -PVS(0, alpha, beta, searchPly);
+                            eval = -PVS(0, alpha, beta, searchPly);
                             if (eval < threshold)
                                 return alpha;
                         }
@@ -158,8 +159,8 @@ namespace ChessChallenge.Example
 
             // Generate appropriate moves depending on whether we're in QSearch
             // Using var to save a single token
-            var moves = inQSearch ? GetOrderedMoves(Move.NullMove, !inCheck) :
-                                    GetOrderedMoves(TTRetrieve.BestMove, false);
+            var moves = inQSearch ? GetOrderedMoves(Move.NullMove, searchPly, !inCheck) :
+                                    GetOrderedMoves(TTRetrieve.BestMove, searchPly, false);
 
             Move bestMove = inQSearch ? Move.NullMove : moves[0];
             bool searchForPV = true;
@@ -219,7 +220,7 @@ namespace ChessChallenge.Example
 
         // Scoring algorithm using MVVLVA
         // Taking into account the best move found from the previous search
-        private Move[] GetOrderedMoves(Move hashMove, bool onlyCaputures)
+        private Move[] GetOrderedMoves(Move hashMove, int searchPly, bool onlyCaputures)
             => board.GetLegalMoves(onlyCaputures).OrderByDescending(move =>
             {
                 // Cache this here to save tokens
@@ -278,19 +279,21 @@ namespace ChessChallenge.Example
             int middlegame = 0, endgame = 0, gamephase = 0;
             foreach (bool sideToMove in new[] { true, false })
             {
-                // Initialize to the pawn bitboard
-                ulong mask = board.GetPieceBitboard(PieceType.Pawn, sideToMove);
-
                 // Start from the second bitboard and up since pawns have already been handled
-                for (int piece = 0, square; piece < 5; mask = board.GetPieceBitboard((PieceType)(++piece + 1), sideToMove))
+                for (int piece = -1, square; ++piece < 6;)
+                {
+                    ulong mask = board.GetPieceBitboard((PieceType)piece + 1, sideToMove);
                     while (mask != 0)
                     {
+                        // Gamephase, middlegame -> endgame
                         gamephase += GamePhaseIncrement[piece];
+
+                        // Material and square evaluation
                         square = BitboardHelper.ClearAndGetIndexOfLSB(ref mask) ^ (sideToMove ? 56 : 0);
                         middlegame += UnpackedPestoTables[square][piece];
                         endgame += UnpackedPestoTables[square][piece + 6];
                     }
-
+                }
                 middlegame = -middlegame;
                 endgame = -endgame;
             }
