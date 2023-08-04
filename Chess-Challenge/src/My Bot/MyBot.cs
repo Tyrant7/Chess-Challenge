@@ -1,12 +1,13 @@
 ﻿using ChessChallenge.API;
 using System;
 using System.Linq;
+using System.Security.Principal;
 
 // TODO: Try swapping out the draw and checkmate logic to be more concise and make the bot faster
+// TODO: Tune NMP with a small and big R value depending on depth (depth > 6) R = 3, else R = 2
 
 // Heuristics
-// TODO: Razoring
-// TODO: Killer moves
+// TODO: Aspiration Windows
 // TODO: Late move reductions
 // TODO: Passed pawn evaluation
 // TODO: Experiment with new sorting techniques for moves
@@ -77,6 +78,7 @@ public class MyBot : IChessBot
         // Declare some reused variables after gamestate
         bool inQSearch = depth <= 0;
         bool inCheck = board.IsInCheck();
+        bool isPVNode = beta - alpha > 1;
 
         // Define best eval all the way up here to generate the standing pattern
         int bestEval = -9999999;
@@ -122,7 +124,7 @@ public class MyBot : IChessBot
             }
 
             // If this node is NOT part of the PV
-            if (beta - alpha <= 1)
+            if (!isPVNode)
             {
                 int eval;
                 if (depth < 3 && !inCheck)
@@ -147,20 +149,6 @@ public class MyBot : IChessBot
                     if (eval >= beta)
                         return eval;
                 }
-
-                // Razoring - cut nodes near tips of branches
-                /*
-                if (depth <= 3 && !inCheck && allowNull)
-                {
-                    int threshold = alpha - 300 - (depth - 1) * 60;
-                    if (Evaluate() < threshold)
-                    {
-                        eval = -PVS(0, alpha, beta, searchPly);
-                        if (eval < threshold)
-                            return alpha;
-                    }
-                }
-                */
             }
         }
 
@@ -170,16 +158,25 @@ public class MyBot : IChessBot
                                 GetOrderedMoves(TTRetrieve.BestMove, searchPly, false);
 
         Move bestMove = inQSearch ? Move.NullMove : moves[0];
-        bool searchForPV = true;
+        int index = 0;
         foreach (Move move in moves)
         {
+            // Calculate reduction factor
+            int R = inQSearch || move.IsCapture || move.IsPromotion || inCheck || isPVNode || depth < 3 || index < 5 
+                ? 1 
+                : 2;
+
             board.MakeMove(move);
 
             // Always fully search the first child, search the rest with a null window
-            int eval = -PVS(depth - 1, searchForPV ? -beta : -alpha - 1, -alpha, searchPly);
+            int eval = -PVS(depth - R, index == 0 ? -beta : -alpha - 1, -alpha, searchPly); 
 
-            // Found a move that can raise alpha, do a research
-            if (!searchForPV && alpha < eval && eval < beta)
+            // Found a move that can raise alpha, do a research without reduction
+            if (index > 0 && alpha < eval && eval < beta)
+                eval = -PVS(depth - 1, -beta, -alpha, searchPly);
+
+            // Reduced search raised alpha, research it
+            if (R > 1 && alpha < eval)
                 eval = -PVS(depth - 1, -beta, -alpha, searchPly);
 
             board.UndoMove(move);
@@ -207,9 +204,9 @@ public class MyBot : IChessBot
                 }
             }
 
-            // Will set it to false if in a regular search,
-            // but in QSearch will always search every node as if it's first
-            searchForPV = inQSearch;
+            // No LMR or PVS in QSearch
+            if (!inQSearch)
+                index++;
         }
 
         // Transposition table insertion
@@ -286,7 +283,6 @@ public class MyBot : IChessBot
         int middlegame = 0, endgame = 0, gamephase = 0;
         foreach (bool sideToMove in new[] { true, false })
         {
-            // Start from the second bitboard and up since pawns have already been handled
             for (int piece = -1, square; ++piece < 6; )
             {
                 ulong mask = board.GetPieceBitboard((PieceType)piece + 1, sideToMove);
