@@ -122,7 +122,7 @@ public class MyBot : IChessBot
                     return score;
             }
 
-            // If this node is NOT part of the PV
+            // If this node is NOT part of the PV and we're not in check
             if (beta - alpha <= 1 && !inCheck)
             {
                 // Static move pruning
@@ -148,8 +148,10 @@ public class MyBot : IChessBot
                         return eval;
                 }
 
+                int[] futilityMargins = { 0, 281, 512 };
+
                 // Can only futility prune when at low depth and behind in evaluation by a large margin
-                canPrune = depth < 3 && eval + 300 * depth < alpha;
+                canPrune = depth < 3 && eval + futilityMargins[depth] < alpha;
             }
         }
 
@@ -162,7 +164,7 @@ public class MyBot : IChessBot
         bool searchForPV = true;
         foreach (Move move in moves)
         {
-            if (canPrune && !(move.IsCapture || move.IsPromotion || inCheck))
+            if (canPrune && !move.IsCapture && !move.IsPromotion)
                 continue;
 
             board.MakeMove(move);
