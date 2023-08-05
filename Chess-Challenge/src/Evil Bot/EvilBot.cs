@@ -115,12 +115,12 @@ namespace ChessChallenge.Example
                 }
 
                 // If this node is NOT part of the PV
-                if (beta - alpha <= 1)
+                if (beta - alpha <= 1 && !inCheck)
                 {
+                    // Static move pruning
                     int eval;
-                    if (depth < 3 && !inCheck)
+                    if (depth < 3)
                     {
-                        // Static move pruning
                         eval = Evaluate();
 
                         // Give ourselves a margin of 120 centipawns times depth.
@@ -131,8 +131,9 @@ namespace ChessChallenge.Example
                     }
 
                     // NULL move pruning
-                    if (depth > 2 && allowNull && board.TrySkipTurn())
+                    if (depth > 2 && allowNull)
                     {
+                        board.TrySkipTurn();
                         eval = -PVS(depth - 3, -beta, 1 - beta, searchPly, false);
                         board.UndoSkipTurn();
 
@@ -140,29 +141,15 @@ namespace ChessChallenge.Example
                         if (eval >= beta)
                             return eval;
                     }
-
-                    // Razoring - cut nodes near tips of branches
-                    /*
-                    if (depth <= 3 && !inCheck && allowNull)
-                    {
-                        int threshold = alpha - 300 - (depth - 1) * 60;
-                        if (Evaluate() < threshold)
-                        {
-                            eval = -PVS(0, alpha, beta, searchPly);
-                            if (eval < threshold)
-                                return alpha;
-                        }
-                    }
-                    */
                 }
             }
 
             // Generate appropriate moves depending on whether we're in QSearch
             // Using var to save a single token
-            var moves = inQSearch ? GetOrderedMoves(Move.NullMove, searchPly, !inCheck) :
+            var moves = inQSearch ? GetOrderedMoves(default, searchPly, !inCheck) :
                                     GetOrderedMoves(TTRetrieve.BestMove, searchPly, false);
 
-            Move bestMove = inQSearch ? Move.NullMove : moves[0];
+            Move bestMove = inQSearch ? default : moves[0];
             bool searchForPV = true;
             foreach (Move move in moves)
             {
@@ -279,7 +266,6 @@ namespace ChessChallenge.Example
             int middlegame = 0, endgame = 0, gamephase = 0;
             foreach (bool sideToMove in new[] { true, false })
             {
-                // Start from the second bitboard and up since pawns have already been handled
                 for (int piece = -1, square; ++piece < 6;)
                 {
                     ulong mask = board.GetPieceBitboard((PieceType)piece + 1, sideToMove);
