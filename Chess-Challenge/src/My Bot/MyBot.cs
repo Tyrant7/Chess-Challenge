@@ -3,12 +3,12 @@ using System;
 using System.Linq;
 
 // TODO: Try swapping out the draw and checkmate logic to be more concise and make the bot faster
-// TODO: Experiment with new sorting techniques for moves
+
+// TODO: Tons of token reduction. I can see lots of spots where a few tokens can be saved
 
 // Heuristics
 // TODO: Aspiration Windows
-// TODO: Late move reductions
-// TODO: Try to get killers worknig again
+// TODO: Try to get killers working again
 // TODO: Passed pawn evaluation
 
 public class MyBot : IChessBot
