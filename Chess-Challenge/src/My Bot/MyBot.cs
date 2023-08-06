@@ -3,12 +3,12 @@ using System;
 using System.Linq;
 
 // TODO: Try swapping out the draw and checkmate logic to be more concise and make the bot faster
-// TODO: Tune NMP with a small and big R value depending on depth (depth > 6) R = 3, else R = 2
 // TODO: Experiment with new sorting techniques for moves
 
 // Heuristics
 // TODO: Aspiration Windows
 // TODO: Late move reductions
+// TODO: Try to get killers worknig again
 // TODO: Passed pawn evaluation
 
 public class MyBot : IChessBot
@@ -77,6 +77,7 @@ public class MyBot : IChessBot
         // Declare some reused variables after gamestate
         bool inQSearch = depth <= 0;
         bool inCheck = board.IsInCheck();
+        bool notPV = beta - alpha <= 1;
         bool canPrune = false;
 
         // Define best eval all the way up here to generate the standing pattern
@@ -123,7 +124,7 @@ public class MyBot : IChessBot
             }
 
             // If this node is NOT part of the PV and we're not in check
-            if (beta - alpha <= 1 && !inCheck)
+            if (notPV && !inCheck)
             {
                 // Static move pruning
                 int eval = Evaluate();
@@ -136,6 +137,10 @@ public class MyBot : IChessBot
                         return eval - 120 * depth;
                 }
 
+                // Extended futility pruning
+                // Can only prune when at lower depth and behind in evaluation by a large margin
+                canPrune = depth <= 8 && eval + 40 + depth * 120 <= alpha;
+
                 // NULL move pruning
                 if (depth > 2 && allowNull)
                 {
@@ -147,27 +152,29 @@ public class MyBot : IChessBot
                     if (eval >= beta)
                         return eval;
                 }
-
-                int[] futilityMargins = { 0, 281, 512 };
-
-                // Can only futility prune when at low depth and behind in evaluation by a large margin
-                canPrune = depth < 3 && eval + futilityMargins[depth] < alpha;
             }
         }
 
         // Generate appropriate moves depending on whether we're in QSearch
         // Using var to save a single token
-        var moves = inQSearch ? GetOrderedMoves(default, searchPly, !inCheck) :
-                                GetOrderedMoves(TTRetrieve.BestMove, searchPly, false);
+        var moves = inQSearch ? GetOrderedMoves(default, !inCheck) :
+                                GetOrderedMoves(TTRetrieve.BestMove, false);
 
+        // TODO: can just always set to default, test to make sure though
         Move bestMove = inQSearch ? default : moves[0];
+
         bool searchForPV = true;
+        // int tried = 0;
         foreach (Move move in moves)
         {
-            if (canPrune && !move.IsCapture && !move.IsPromotion)
+            bool tactical = searchForPV || move.IsCapture || move.IsPromotion;
+            if (canPrune && !tactical)
                 continue;
 
             board.MakeMove(move);
+
+            // Make sure there are no checks before or after the move was played
+            // int R = (notPV && !tactical && tried++ > 4 && depth > 2 && !inCheck && board.IsInCheck()) ? 2 + depth / 4 : 1;
 
             // Always fully search the first child, search the rest with a null window
             int eval = -PVS(depth - 1, searchForPV ? -beta : -alpha - 1, -alpha, searchPly);
@@ -221,7 +228,7 @@ public class MyBot : IChessBot
 
     // Scoring algorithm using MVVLVA
     // Taking into account the best move found from the previous search
-    private Move[] GetOrderedMoves(Move hashMove, int searchPly, bool onlyCaputures)
+    private Move[] GetOrderedMoves(Move hashMove, bool onlyCaputures)
         => board.GetLegalMoves(onlyCaputures).OrderByDescending(move =>
         {
             // Cache this here to save tokens

@@ -70,6 +70,8 @@ namespace ChessChallenge.Example
             // Declare some reused variables after gamestate
             bool inQSearch = depth <= 0;
             bool inCheck = board.IsInCheck();
+            bool notPV = beta - alpha <= 1;
+            bool canPrune = false;
 
             // Define best eval all the way up here to generate the standing pattern
             int bestEval = -9999999;
@@ -114,21 +116,22 @@ namespace ChessChallenge.Example
                         return score;
                 }
 
-                // If this node is NOT part of the PV
-                if (beta - alpha <= 1 && !inCheck)
+                // If this node is NOT part of the PV and we're not in check
+                if (notPV && !inCheck)
                 {
                     // Static move pruning
-                    int eval;
+                    int eval = Evaluate();
                     if (depth < 3)
                     {
-                        eval = Evaluate();
-
                         // Give ourselves a margin of 120 centipawns times depth.
                         // If we're up by more than that margin, there's no point in
                         // searching any further since our position is so good
                         if (eval - 120 * depth >= beta)
                             return eval - 120 * depth;
                     }
+
+                    // Can only futility prune when at low depth and behind in evaluation by a large margin
+                    canPrune = depth <= 8 && eval + 40 + depth * 120 <= alpha;
 
                     // NULL move pruning
                     if (depth > 2 && allowNull)
@@ -146,14 +149,24 @@ namespace ChessChallenge.Example
 
             // Generate appropriate moves depending on whether we're in QSearch
             // Using var to save a single token
-            var moves = inQSearch ? GetOrderedMoves(default, searchPly, !inCheck) :
-                                    GetOrderedMoves(TTRetrieve.BestMove, searchPly, false);
+            var moves = inQSearch ? GetOrderedMoves(default, !inCheck) :
+                                    GetOrderedMoves(TTRetrieve.BestMove, false);
 
+            // TODO: can just always set to default, test to make sure though
             Move bestMove = inQSearch ? default : moves[0];
+
             bool searchForPV = true;
+            // int tried = 0;
             foreach (Move move in moves)
             {
+                bool tactical = searchForPV || move.IsCapture || move.IsPromotion;
+                if (canPrune && !tactical)
+                    continue;
+
                 board.MakeMove(move);
+
+                // Make sure there are no checks before or after the move was played
+                // int R = (notPV && !tactical && tried > 4 && depth > 2 && !inCheck && board.IsInCheck()) ? 2 + depth / 4 : 1;
 
                 // Always fully search the first child, search the rest with a null window
                 int eval = -PVS(depth - 1, searchForPV ? -beta : -alpha - 1, -alpha, searchPly);
@@ -207,7 +220,7 @@ namespace ChessChallenge.Example
 
         // Scoring algorithm using MVVLVA
         // Taking into account the best move found from the previous search
-        private Move[] GetOrderedMoves(Move hashMove, int searchPly, bool onlyCaputures)
+        private Move[] GetOrderedMoves(Move hashMove, bool onlyCaputures)
             => board.GetLegalMoves(onlyCaputures).OrderByDescending(move =>
             {
                 // Cache this here to save tokens
