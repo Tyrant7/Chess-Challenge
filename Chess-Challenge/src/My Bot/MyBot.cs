@@ -77,7 +77,7 @@ public class MyBot : IChessBot
         // Declare some reused variables after gamestate
         bool inQSearch = depth <= 0;
         bool inCheck = board.IsInCheck();
-        bool notPV = beta - alpha <= 1;
+        bool isPV = beta - alpha > 1;
         bool canPrune = false;
 
         // Define best eval all the way up here to generate the standing pattern
@@ -124,34 +124,36 @@ public class MyBot : IChessBot
             }
 
             // If this node is NOT part of the PV and we're not in check
-            if (notPV && !inCheck)
+            if (!isPV && !inCheck)
             {
                 // Static move pruning
-                int eval = Evaluate();
+                int staticEval = Evaluate();
                 if (depth < 3)
                 {
                     // Give ourselves a margin of 120 centipawns times depth.
                     // If we're up by more than that margin, there's no point in
                     // searching any further since our position is so good
-                    if (eval - 120 * depth >= beta)
-                        return eval - 120 * depth;
+                    if (staticEval - 120 * depth >= beta)
+                        return staticEval - 120 * depth;
                 }
-
-                // Extended futility pruning
-                // Can only prune when at lower depth and behind in evaluation by a large margin
-                canPrune = depth <= 8 && eval + 40 + depth * 120 <= alpha;
 
                 // NULL move pruning
                 if (depth > 2 && allowNull)
                 {
                     board.TrySkipTurn();
-                    eval = -PVS(depth - 3, -beta, 1 - beta, searchPly, false);
+                    int eval = -PVS(depth - 3, -beta, 1 - beta, searchPly, false);
                     board.UndoSkipTurn();
 
                     // Failed high on the null move
                     if (eval >= beta)
                         return eval;
                 }
+
+                // Extended futility pruning
+                // Can only prune when at lower depth and behind in evaluation by a large margin
+                canPrune = depth <= 8 && staticEval + 40 + depth * 120 <= alpha;
+
+                // TODO: Razoring
             }
         }
 
@@ -164,7 +166,7 @@ public class MyBot : IChessBot
         Move bestMove = inQSearch ? default : moves[0];
 
         bool searchForPV = true;
-        // int tried = 0;
+        int tried = 0;
         foreach (Move move in moves)
         {
             bool tactical = searchForPV || move.IsCapture || move.IsPromotion;
@@ -174,14 +176,41 @@ public class MyBot : IChessBot
             board.MakeMove(move);
 
             // Make sure there are no checks before or after the move was played
-            // int R = (notPV && !tactical && tried++ > 4 && depth > 2 && !inCheck && board.IsInCheck()) ? 2 + depth / 4 : 1;
+            // int R = (notPV && !tactical && tried++ > 6 && !inCheck && !board.IsInCheck()) ? 2 : 1;
 
             // Always fully search the first child, search the rest with a null window
-            int eval = -PVS(depth - 1, searchForPV ? -beta : -alpha - 1, -alpha, searchPly);
+            /*
+            int eval = -PVS(depth - R, searchForPV ? -beta : -alpha - 1, -alpha, searchPly);
 
             // Found a move that can raise alpha, do a research
             if (!searchForPV && alpha < eval && eval < beta)
                 eval = -PVS(depth - 1, -beta, -alpha, searchPly);
+            */
+
+            // Current work in progress LMR (around +40 elo)
+            int eval;
+            if (tried++ == 0 || inQSearch)
+                // Always search first node with full depth
+                eval = -PVS(depth - 1, -beta, -alpha, searchPly);
+            else
+            {
+                // LMR conditions
+                if (isPV || tactical || tried < 8 || depth < 3 || inCheck || board.IsInCheck())
+                    // Do a full search
+                    eval = alpha + 1;
+                else
+                    // We're good to reduce -> search with reduced depth and a null window, and if we can raise alpha
+                    eval = -PVS(depth - 1 - depth / 3, -alpha - 1, -alpha, searchPly);
+
+                if (eval > alpha)
+                {
+                    // Search with a null window
+                    eval = -PVS(depth - 1, -alpha - 1, -alpha, searchPly);
+                    if (alpha < eval && eval < beta)
+                        // We raised alpha, research with no null window
+                        eval = -PVS(depth - 1, -beta, -alpha, searchPly);
+                }
+            }
 
             board.UndoMove(move);
 
