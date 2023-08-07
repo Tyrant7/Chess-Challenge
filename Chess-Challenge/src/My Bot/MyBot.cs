@@ -26,7 +26,9 @@ public class MyBot : IChessBot
     {
         // Cache the board to save precious tokens
         board = newBoard;
-        rootMove = board.GetLegalMoves()[0];
+
+        // If having illegal move issues, bring this back and move the out of time check back to top of move loop in PVS
+        // rootMove = board.GetLegalMoves()[0];
 
         // Reset history heuristics and killer moves
         historyHeuristics = new int[2, 7, 64];
@@ -55,12 +57,6 @@ public class MyBot : IChessBot
     // This method doubles as our PVS and QSearch in order to save tokens
     private int PVS(int depth, int alpha, int beta, int searchPly, bool allowNull = true)
     {
-        // Use this local function when updating alpha to save tokens
-        /*
-        void UpdateAlpha(int contender) => alpha = Math.Max(alpha, contender);
-        */
-
-
         // Declare some reused variables
         bool inQSearch = depth <= 0,
             inCheck = board.IsInCheck(),
@@ -163,10 +159,6 @@ public class MyBot : IChessBot
         Move bestMove = default;
         foreach (Move move in moves)
         {
-            // Return a large value guaranteed to be greater than beta
-            if (OutOfTime)
-                return 99999999;
-
             bool tactical = searchForPV || move.IsCapture || move.IsPromotion;
             if (canPrune && !tactical)
                 continue;
@@ -232,6 +224,11 @@ public class MyBot : IChessBot
                     break;
                 }
             }
+
+            // Return a large value guaranteed to be greater than beta
+            // Wait until after at least one move has been searched to exit the move loop so there are no pesky illegal moves
+            if (OutOfTime)
+                return 99999999;
 
             // Will set it to false if in a regular search,
             // but in QSearch will always search every node as if it's first
