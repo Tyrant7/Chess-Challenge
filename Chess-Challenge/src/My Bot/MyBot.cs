@@ -1,11 +1,8 @@
 ﻿using ChessChallenge.API;
 using System;
 using System.Linq;
-using static System.Formats.Asn1.AsnWriter;
 
 // TODO: Tons of token reduction. I can see lots of spots where a few tokens can be saved
-
-// TODO: Fix illegal move issue and TT bugs
 
 // Heuristics
 // TODO: Aspiration Windows
@@ -18,8 +15,7 @@ public class MyBot : IChessBot
     private Timer searchTimer;
 
     // Only returns true when out of time AND a move has been found
-    private bool OutOfTime => searchTimer.MillisecondsElapsedThisTurn > searchMaxTime &&
-                              !rootMove.IsNull;
+    private bool OutOfTime => searchTimer.MillisecondsElapsedThisTurn > searchMaxTime;
 
     private int[,,] historyHeuristics;
 
@@ -30,7 +26,7 @@ public class MyBot : IChessBot
     {
         // Cache the board to save precious tokens
         board = newBoard;
-        rootMove = default;
+        rootMove = board.GetLegalMoves()[0];
 
         // Reset history heuristics and killer moves
         historyHeuristics = new int[2, 7, 64];
@@ -42,22 +38,15 @@ public class MyBot : IChessBot
         // Progressively increase search depth, starting from 2
         for (int depth = 2; ;)
         {
-            Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms"); // #DEBUG
-
             PVS(depth++, -9999999, 9999999, 0);
 
-            /*
-            if (OutOfTime)
+            // Out of time or found checkmate
+            if (OutOfTime || TTRetrieve.Score > 90000)
             {
-                Console.WriteLine("Hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " +
-                    TTRetrieve().Score + " centipawns.");
-                return TTRetrieve().BestMove;
-            }
-            */
-
-
-            if (OutOfTime)
+                Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " + // #DEBUG
+                    TTRetrieve.Score + " centipawns."); // #DEBUG
                 return rootMove;
+            }
         }
     }
 
@@ -77,13 +66,16 @@ public class MyBot : IChessBot
             inCheck = board.IsInCheck(),
             isPV = beta - alpha > 1,
             canPrune = false,
-            notRoot = searchPly++ > 0;
+            notRoot = searchPly++ > 0,
+            searchForPV = true;
 
         if (notRoot && board.IsRepeatedPosition())
             return 0;
 
         // Define best eval all the way up here to generate the standing pattern for QSearch
-        int bestEval = -9999999, originalAlpha = alpha;
+        int bestEval = -9999999, 
+            originalAlpha = alpha,
+            movesTried = 0;
 
         // Transposition table lookup -> Found a valid entry for this position
         if (TTRetrieve.Hash == board.ZobristKey && notRoot &&
@@ -157,20 +149,18 @@ public class MyBot : IChessBot
 
         // Generate appropriate moves depending on whether we're in QSearch
         // Using var to save a single token
-        var moves = board.GetLegalMoves(inQSearch && !inCheck)?.OrderByDescending(move =>
+        var moves = board.GetLegalMoves(inQSearch && !inCheck).OrderByDescending(move =>
         {
             return move == TTRetrieve.BestMove ? 100000 :
             move.IsCapture ? 1000 * (int)move.CapturePieceType - (int)move.MovePieceType :
             historyHeuristics[board.IsWhiteToMove ? 1 : 0, (int)move.MovePieceType, move.TargetSquare.Index];
         }).ToArray();
 
+        // Gamestate, checkmate and draws
         if (!inQSearch && moves.Length == 0)
             return inCheck ? searchPly - 99999 : 0;
 
         Move bestMove = default;
-
-        bool searchForPV = true;
-        int tried = 0;
         foreach (Move move in moves)
         {
             // Return a large value guaranteed to be greater than beta
@@ -197,13 +187,13 @@ public class MyBot : IChessBot
 
             // Current work in progress LMR (around +40 elo)
             int eval;
-            if (tried++ == 0 || inQSearch)
+            if (movesTried++ == 0 || inQSearch)
                 // Always search first node with full depth
                 eval = -PVS(depth - 1, -beta, -alpha, searchPly);
             else
             {
                 // LMR conditions
-                if (isPV || tactical || tried < 8 || depth < 3 || inCheck || board.IsInCheck())
+                if (isPV || tactical || movesTried < 8 || depth < 3 || inCheck || board.IsInCheck())
                     // Do a full search
                     eval = alpha + 1;
                 else

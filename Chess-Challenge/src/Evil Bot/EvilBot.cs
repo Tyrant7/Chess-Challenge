@@ -9,17 +9,20 @@ namespace ChessChallenge.Example
         private int searchMaxTime;
         private Timer searchTimer;
 
-        // Return true if out of time AND a valid move has been found
+        // Only returns true when out of time AND a move has been found
         private bool OutOfTime => searchTimer.MillisecondsElapsedThisTurn > searchMaxTime &&
-                                  TTRetrieve.Hash == board.ZobristKey &&
-                                  !TTRetrieve.BestMove.IsNull;
+                                  !rootMove.IsNull;
+
+        private int[,,] historyHeuristics;
 
         Board board;
+        Move rootMove;
 
         public Move Think(Board newBoard, Timer timer)
         {
             // Cache the board to save precious tokens
             board = newBoard;
+            rootMove = default;
 
             // Reset history heuristics and killer moves
             historyHeuristics = new int[2, 7, 64];
@@ -44,8 +47,9 @@ namespace ChessChallenge.Example
                 }
                 */
 
+
                 if (OutOfTime)
-                    return TTRetrieve.BestMove;
+                    return rootMove;
             }
         }
 
@@ -59,22 +63,42 @@ namespace ChessChallenge.Example
             void UpdateAlpha(int contender) => alpha = Math.Max(alpha, contender);
             */
 
-            // Evaluate the gamestate
-            if (board.IsDraw())
-                // Discourage draws slightly
-                return 0;
-            if (board.IsInCheckmate())
-                // Checkmate = 99999
-                return -(99999 - searchPly);
 
-            // Declare some reused variables after gamestate
+            // Declare some reused variables
             bool inQSearch = depth <= 0,
                 inCheck = board.IsInCheck(),
                 isPV = beta - alpha > 1,
-                canPrune = false;
+                canPrune = false,
+                notRoot = searchPly++ > 0;
 
-            // Define best eval all the way up here to generate the standing pattern
-            int bestEval = -9999999;
+            if (notRoot && board.IsRepeatedPosition())
+                return 0;
+
+            // Define best eval all the way up here to generate the standing pattern for QSearch
+            int bestEval = -9999999, originalAlpha = alpha;
+
+            // Transposition table lookup -> Found a valid entry for this position
+            if (TTRetrieve.Hash == board.ZobristKey && notRoot &&
+                TTRetrieve.Depth >= depth)
+            {
+                // Cache this value to save tokens by not referencing using the . operator
+                int score = TTRetrieve.Score;
+
+                // Exact
+                if (TTRetrieve.Flag == 1)
+                    return score;
+
+                // Lowerbound
+                if (TTRetrieve.Flag == -1)
+                    alpha = Math.Max(alpha, score);
+                // Upperbound
+                else
+                    beta = Math.Min(beta, score);
+
+                if (alpha >= beta)
+                    return score;
+            }
+
             if (inQSearch)
             {
                 // Determine if quiescence search should be continued
@@ -91,44 +115,17 @@ namespace ChessChallenge.Example
                 if (inCheck)
                     depth++;
 
-                // IMPORTANT NOTE: Increment the value of searchPly after comparison to save tokens since blocks below this do not care
-                // about the value and are simply passing searchPly + 1 to the next iteration
-
-                // Transposition table lookup -> Found a valid entry for this position
-                if (TTRetrieve.Hash == board.ZobristKey && searchPly++ > 0 &&
-                    TTRetrieve.Depth >= depth)
-                {
-                    // Cache this value to save tokens by not referencing using the . operator
-                    int score = TTRetrieve.Score;
-
-                    // Exact
-                    if (TTRetrieve.Flag == 1)
-                        return score;
-
-                    // Lowerbound
-                    if (TTRetrieve.Flag == -1)
-                        alpha = Math.Max(alpha, score);
-                    // Upperbound
-                    else
-                        beta = Math.Min(beta, score);
-
-                    if (alpha >= beta)
-                        return score;
-                }
-
                 // If this node is NOT part of the PV and we're not in check
                 if (!isPV && !inCheck)
                 {
                     // Static move pruning
                     int staticEval = Evaluate();
-                    if (depth < 3)
-                    {
-                        // Give ourselves a margin of 120 centipawns times depth.
-                        // If we're up by more than that margin, there's no point in
-                        // searching any further since our position is so good
-                        if (staticEval - 120 * depth >= beta)
-                            return staticEval - 120 * depth;
-                    }
+
+                    // Give ourselves a margin of 120 centipawns times depth.
+                    // If we're up by more than that margin, there's no point in
+                    // searching any further since our position is so good
+                    if (depth < 3 && staticEval - 120 * depth >= beta)
+                        return staticEval - 120 * depth;
 
                     // NULL move pruning
                     if (depth > 2 && allowNull)
@@ -152,16 +149,27 @@ namespace ChessChallenge.Example
 
             // Generate appropriate moves depending on whether we're in QSearch
             // Using var to save a single token
-            var moves = inQSearch ? GetOrderedMoves(default, !inCheck) :
-                                    GetOrderedMoves(TTRetrieve.BestMove, false);
+            var moves = board.GetLegalMoves(inQSearch && !inCheck)?.OrderByDescending(move =>
+            {
+                return move == TTRetrieve.BestMove ? 100000 :
+                move.IsCapture ? 1000 * (int)move.CapturePieceType - (int)move.MovePieceType :
+                historyHeuristics[board.IsWhiteToMove ? 1 : 0, (int)move.MovePieceType, move.TargetSquare.Index];
+            }).ToArray();
 
-            // TODO: can just always set to default, test to make sure though
-            Move bestMove = inQSearch ? default : moves[0];
+            // Gamestate, checkmate and draws
+            if (!inQSearch && moves.Length == 0)
+                return inCheck ? searchPly - 99999 : 0;
+
+            Move bestMove = default;
 
             bool searchForPV = true;
             int tried = 0;
             foreach (Move move in moves)
             {
+                // Return a large value guaranteed to be greater than beta
+                if (OutOfTime)
+                    return 99999999;
+
                 bool tactical = searchForPV || move.IsCapture || move.IsPromotion;
                 if (canPrune && !tactical)
                     continue;
@@ -207,13 +215,15 @@ namespace ChessChallenge.Example
 
                 board.UndoMove(move);
 
-                if (OutOfTime)
-                    return 0;
-
                 if (eval > bestEval)
                 {
                     bestMove = move;
                     bestEval = eval;
+
+                    // Update the root move
+                    if (!notRoot)
+                        rootMove = move;
+
                     alpha = Math.Max(eval, alpha);
 
                     // Cutoff
@@ -222,11 +232,7 @@ namespace ChessChallenge.Example
                         // Update history tables
                         if (!move.IsCapture)
                             historyHeuristics[board.IsWhiteToMove ? 1 : 0, (int)move.MovePieceType, move.TargetSquare.Index] += depth * depth;
-
-                        if (!inQSearch)
-                            TTInsert(move, eval, depth, -1);
-
-                        return eval;
+                        break;
                     }
                 }
 
@@ -236,35 +242,15 @@ namespace ChessChallenge.Example
             }
 
             // Transposition table insertion
-            if (!inQSearch)
-                TTInsert(bestMove, bestEval, depth, bestEval <= alpha ? 2 : 1);
+            transpositionTable[board.ZobristKey & 0x3FFFFF] = new TTEntry(
+                board.ZobristKey,
+                bestMove,
+                bestEval,
+                depth,
+                bestEval >= beta ? -1 : bestEval <= originalAlpha ? 2 : 1);
 
-            return alpha;
+            return bestEval;
         }
-
-        #endregion
-
-        #region Move Ordering
-
-        int[,,] historyHeuristics;
-
-        // Scoring algorithm using MVVLVA
-        // Taking into account the best move found from the previous search
-        private Move[] GetOrderedMoves(Move hashMove, bool onlyCaputures)
-            => board.GetLegalMoves(onlyCaputures).OrderByDescending(move =>
-            {
-                // Cache this here to save tokens
-                int victim = (int)move.CapturePieceType;
-
-                // MVVLVA: 0 = None, 6 = King, no bonuses for these two
-                return (victim == 0 || victim == 6 ? 0 : 1000 * victim - (int)move.MovePieceType) +
-
-                // Always check the hash move first
-                (move == hashMove ? 9000 : 0) +
-
-                // History heuristic
-                historyHeuristics[board.IsWhiteToMove ? 1 : 0, (int)move.MovePieceType, move.TargetSquare.Index];
-            }).ToArray();
 
         #endregion
 
@@ -339,17 +325,6 @@ namespace ChessChallenge.Example
 
         private TTEntry TTRetrieve
             => transpositionTable[board.ZobristKey & 0x3FFFFF];
-
-        private void TTInsert(Move bestMove, int score, int depth, int flag)
-        {
-            if (depth > TTRetrieve.Depth)
-                transpositionTable[board.ZobristKey & 0x3FFFFF] = new TTEntry(
-                    board.ZobristKey,
-                    bestMove,
-                    score,
-                    depth,
-                    flag);
-        }
 
         // public enum Flag
         // {
