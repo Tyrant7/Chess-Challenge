@@ -1,8 +1,11 @@
 ﻿using ChessChallenge.API;
 using System;
 using System.Linq;
+using static System.Formats.Asn1.AsnWriter;
 
 // TODO: Tons of token reduction. I can see lots of spots where a few tokens can be saved
+
+// TODO: Fix illegal move issue and TT bugs
 
 // Heuristics
 // TODO: Aspiration Windows
@@ -14,15 +17,20 @@ public class MyBot : IChessBot
     private int searchMaxTime;
     private Timer searchTimer;
 
-    // Return true if out of time AND a valid move has been found
-    private bool OutOfTime => searchTimer.MillisecondsElapsedThisTurn > searchMaxTime;
+    // Only returns true when out of time AND a move has been found
+    private bool OutOfTime => searchTimer.MillisecondsElapsedThisTurn > searchMaxTime &&
+                              !rootMove.IsNull;
+
+    private int[,,] historyHeuristics;
 
     Board board;
+    Move rootMove;
 
     public Move Think(Board newBoard, Timer timer)
     {
         // Cache the board to save precious tokens
         board = newBoard;
+        rootMove = default;
 
         // Reset history heuristics and killer moves
         historyHeuristics = new int[2, 7, 64];
@@ -47,8 +55,9 @@ public class MyBot : IChessBot
             }
             */
 
+
             if (OutOfTime)
-                return TTRetrieve.BestMove.IsNull ? board.GetLegalMoves()[0] : TTRetrieve.BestMove;
+                return rootMove;
         }
     }
 
@@ -63,7 +72,7 @@ public class MyBot : IChessBot
         */
 
 
-        // Declare some reused variables after gamestate
+        // Declare some reused variables
         bool inQSearch = depth <= 0,
             inCheck = board.IsInCheck(),
             isPV = beta - alpha > 1,
@@ -73,7 +82,7 @@ public class MyBot : IChessBot
         if (notRoot && board.IsRepeatedPosition())
             return 0;
 
-        // Define best eval all the way up here to generate the standing pattern
+        // Define best eval all the way up here to generate the standing pattern for QSearch
         int bestEval = -9999999, originalAlpha = alpha;
 
         // Transposition table lookup -> Found a valid entry for this position
@@ -119,14 +128,12 @@ public class MyBot : IChessBot
             {
                 // Static move pruning
                 int staticEval = Evaluate();
-                if (depth < 3)
-                {
-                    // Give ourselves a margin of 120 centipawns times depth.
-                    // If we're up by more than that margin, there's no point in
-                    // searching any further since our position is so good
-                    if (staticEval - 120 * depth >= beta)
-                        return staticEval - 120 * depth;
-                }
+
+                // Give ourselves a margin of 120 centipawns times depth.
+                // If we're up by more than that margin, there's no point in
+                // searching any further since our position is so good
+                if (depth < 3 && staticEval - 120 * depth >= beta)
+                    return staticEval - 120 * depth;
 
                 // NULL move pruning
                 if (depth > 2 && allowNull)
@@ -150,7 +157,12 @@ public class MyBot : IChessBot
 
         // Generate appropriate moves depending on whether we're in QSearch
         // Using var to save a single token
-        var moves = GetOrderedMoves(TTRetrieve.BestMove, inQSearch && !inCheck);
+        var moves = board.GetLegalMoves(inQSearch && !inCheck)?.OrderByDescending(move =>
+        {
+            return move == TTRetrieve.BestMove ? 100000 :
+            move.IsCapture ? 1000 * (int)move.CapturePieceType - (int)move.MovePieceType :
+            historyHeuristics[board.IsWhiteToMove ? 1 : 0, (int)move.MovePieceType, move.TargetSquare.Index];
+        }).ToArray();
 
         if (!inQSearch && moves.Length == 0)
             return inCheck ? searchPly - 99999 : 0;
@@ -214,6 +226,11 @@ public class MyBot : IChessBot
             {
                 bestMove = move;
                 bestEval = eval;
+
+                // Update the root move
+                if (!notRoot)
+                    rootMove = move;
+
                 alpha = Math.Max(eval, alpha);
 
                 // Cutoff
@@ -232,37 +249,15 @@ public class MyBot : IChessBot
         }
 
         // Transposition table insertion
-        TTInsert(bestMove, bestEval, depth, bestEval >= beta ? -1 : bestEval <= originalAlpha ? 2 : 1);
+        transpositionTable[board.ZobristKey & 0x3FFFFF] = new TTEntry(
+            board.ZobristKey,
+            bestMove,
+            bestEval,
+            depth,
+            bestEval >= beta ? -1 : bestEval <= originalAlpha ? 2 : 1);
 
         return bestEval;
     }
-
-    #endregion
-
-    #region Move Ordering
-
-    int[,,] historyHeuristics;
-
-
-    // TODO: Debug this method if there are no legal moves it throws an error
-
-    // Scoring algorithm using MVVLVA
-    // Taking into account the best move found from the previous search
-    private Move[] GetOrderedMoves(Move hashMove, bool onlyCaputures)
-        => board.GetLegalMoves(onlyCaputures).OrderByDescending(move =>
-        {
-            // Cache this here to save tokens
-            int victim = (int)move.CapturePieceType;
-
-            // MVVLVA: 0 = None, 6 = King, no bonuses for these two
-            return (victim == 0 || victim == 6 ? 0 : 1000 * victim - (int)move.MovePieceType) +
-
-            // Always check the hash move first
-            (move == hashMove ? 9000 : 0) +
-
-            // History heuristic
-            historyHeuristics[board.IsWhiteToMove ? 1 : 0, (int)move.MovePieceType, move.TargetSquare.Index];
-        }).ToArray();
 
     #endregion
 
@@ -337,16 +332,6 @@ public class MyBot : IChessBot
 
     private TTEntry TTRetrieve
         => transpositionTable[board.ZobristKey & 0x3FFFFF];
-
-    private void TTInsert(Move bestMove, int score, int depth, int flag)
-    {
-        transpositionTable[board.ZobristKey & 0x3FFFFF] = new TTEntry(
-            board.ZobristKey,
-            bestMove,
-            score,
-            depth,
-            flag);
-    }
 
     // public enum Flag
     // {
