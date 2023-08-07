@@ -2,8 +2,6 @@
 using System;
 using System.Linq;
 
-// TODO: Try swapping out the draw and checkmate logic to be more concise and make the bot faster
-
 // TODO: Tons of token reduction. I can see lots of spots where a few tokens can be saved
 
 // Heuristics
@@ -17,9 +15,7 @@ public class MyBot : IChessBot
     private Timer searchTimer;
 
     // Return true if out of time AND a valid move has been found
-    private bool OutOfTime => searchTimer.MillisecondsElapsedThisTurn > searchMaxTime &&
-                              TTRetrieve.Hash == board.ZobristKey &&
-                              TTRetrieve.BestMove != Move.NullMove;
+    private bool OutOfTime => searchTimer.MillisecondsElapsedThisTurn > searchMaxTime;
 
     Board board;
 
@@ -52,7 +48,7 @@ public class MyBot : IChessBot
             */
 
             if (OutOfTime)
-                return TTRetrieve.BestMove;
+                return TTRetrieve.BestMove.IsNull ? board.GetLegalMoves()[0] : TTRetrieve.BestMove;
         }
     }
 
@@ -66,22 +62,42 @@ public class MyBot : IChessBot
         void UpdateAlpha(int contender) => alpha = Math.Max(alpha, contender);
         */
 
-        // Evaluate the gamestate
-        if (board.IsDraw())
-            // Discourage draws slightly
-            return 0;
-        if (board.IsInCheckmate())
-            // Checkmate = 99999
-            return -(99999 - searchPly);
 
         // Declare some reused variables after gamestate
-        bool inQSearch = depth <= 0;
-        bool inCheck = board.IsInCheck();
-        bool isPV = beta - alpha > 1;
-        bool canPrune = false;
+        bool inQSearch = depth <= 0,
+            inCheck = board.IsInCheck(),
+            isPV = beta - alpha > 1,
+            canPrune = false,
+            notRoot = searchPly++ > 0;
+
+        if (notRoot && board.IsRepeatedPosition())
+            return 0;
 
         // Define best eval all the way up here to generate the standing pattern
-        int bestEval = -9999999;
+        int bestEval = -9999999, originalAlpha = alpha;
+
+        // Transposition table lookup -> Found a valid entry for this position
+        if (TTRetrieve.Hash == board.ZobristKey && notRoot &&
+            TTRetrieve.Depth >= depth)
+        {
+            // Cache this value to save tokens by not referencing using the . operator
+            int score = TTRetrieve.Score;
+
+            // Exact
+            if (TTRetrieve.Flag == 1)
+                return score;
+
+            // Lowerbound
+            if (TTRetrieve.Flag == -1)
+                alpha = Math.Max(alpha, score);
+            // Upperbound
+            else
+                beta = Math.Min(beta, score);
+
+            if (alpha >= beta)
+                return score;
+        }
+
         if (inQSearch)
         {
             // Determine if quiescence search should be continued
@@ -97,31 +113,6 @@ public class MyBot : IChessBot
             // Check extensions
             if (inCheck)
                 depth++;
-
-            // IMPORTANT NOTE: Increment the value of searchPly after comparison to save tokens since blocks below this do not care
-            // about the value and are simply passing searchPly + 1 to the next iteration
-
-            // Transposition table lookup -> Found a valid entry for this position
-            if (TTRetrieve.Hash == board.ZobristKey && searchPly++ > 0 &&
-                TTRetrieve.Depth >= depth)
-            {
-                // Cache this value to save tokens by not referencing using the . operator
-                int score = TTRetrieve.Score;
-
-                // Exact
-                if (TTRetrieve.Flag == 1)
-                    return score;
-
-                // Lowerbound
-                if (TTRetrieve.Flag == -1)
-                    alpha = Math.Max(alpha, score);
-                // Upperbound
-                else
-                    beta = Math.Min(beta, score);
-
-                if (alpha >= beta)
-                    return score;
-            }
 
             // If this node is NOT part of the PV and we're not in check
             if (!isPV && !inCheck)
@@ -159,16 +150,21 @@ public class MyBot : IChessBot
 
         // Generate appropriate moves depending on whether we're in QSearch
         // Using var to save a single token
-        var moves = inQSearch ? GetOrderedMoves(default, !inCheck) :
-                                GetOrderedMoves(TTRetrieve.BestMove, false);
+        var moves = GetOrderedMoves(TTRetrieve.BestMove, inQSearch && !inCheck);
 
-        // TODO: can just always set to default, test to make sure though
-        Move bestMove = inQSearch ? default : moves[0];
+        if (!inQSearch && moves.Length == 0)
+            return inCheck ? searchPly - 99999 : 0;
+
+        Move bestMove = default;
 
         bool searchForPV = true;
         int tried = 0;
         foreach (Move move in moves)
         {
+            // Return a large value guaranteed to be greater than beta
+            if (OutOfTime)
+                return 99999999;
+
             bool tactical = searchForPV || move.IsCapture || move.IsPromotion;
             if (canPrune && !tactical)
                 continue;
@@ -214,9 +210,6 @@ public class MyBot : IChessBot
 
             board.UndoMove(move);
 
-            if (OutOfTime)
-                return 0;
-
             if (eval > bestEval)
             {
                 bestMove = move;
@@ -229,11 +222,7 @@ public class MyBot : IChessBot
                     // Update history tables
                     if (!move.IsCapture)
                         historyHeuristics[board.IsWhiteToMove ? 1 : 0, (int)move.MovePieceType, move.TargetSquare.Index] += depth * depth;
-
-                    if (!inQSearch)
-                        TTInsert(move, eval, depth, -1);
-
-                    return eval;
+                    break;
                 }
             }
 
@@ -243,10 +232,9 @@ public class MyBot : IChessBot
         }
 
         // Transposition table insertion
-        if (!inQSearch)
-            TTInsert(bestMove, bestEval, depth, bestEval <= alpha ? 2 : 1);
+        TTInsert(bestMove, bestEval, depth, bestEval >= beta ? -1 : bestEval <= originalAlpha ? 2 : 1);
 
-        return alpha;
+        return bestEval;
     }
 
     #endregion
@@ -254,6 +242,9 @@ public class MyBot : IChessBot
     #region Move Ordering
 
     int[,,] historyHeuristics;
+
+
+    // TODO: Debug this method if there are no legal moves it throws an error
 
     // Scoring algorithm using MVVLVA
     // Taking into account the best move found from the previous search
@@ -316,7 +307,7 @@ public class MyBot : IChessBot
         int middlegame = 0, endgame = 0, gamephase = 0;
         foreach (bool sideToMove in new[] { true, false })
         {
-            for (int piece = -1, square; ++piece < 6; )
+            for (int piece = -1, square; ++piece < 6;)
             {
                 ulong mask = board.GetPieceBitboard((PieceType)piece + 1, sideToMove);
                 while (mask != 0)
@@ -349,13 +340,12 @@ public class MyBot : IChessBot
 
     private void TTInsert(Move bestMove, int score, int depth, int flag)
     {
-        if (depth > TTRetrieve.Depth)
-            transpositionTable[board.ZobristKey & 0x3FFFFF] = new TTEntry(
-                board.ZobristKey,
-                bestMove,
-                score,
-                depth,
-                flag);
+        transpositionTable[board.ZobristKey & 0x3FFFFF] = new TTEntry(
+            board.ZobristKey,
+            bestMove,
+            score,
+            depth,
+            flag);
     }
 
     // public enum Flag

@@ -12,7 +12,7 @@ namespace ChessChallenge.Example
         // Return true if out of time AND a valid move has been found
         private bool OutOfTime => searchTimer.MillisecondsElapsedThisTurn > searchMaxTime &&
                                   TTRetrieve.Hash == board.ZobristKey &&
-                                  TTRetrieve.BestMove != Move.NullMove;
+                                  !TTRetrieve.BestMove.IsNull;
 
         Board board;
 
@@ -68,10 +68,10 @@ namespace ChessChallenge.Example
                 return -(99999 - searchPly);
 
             // Declare some reused variables after gamestate
-            bool inQSearch = depth <= 0;
-            bool inCheck = board.IsInCheck();
-            bool isPV = beta - alpha > 1;
-            bool canPrune = false;
+            bool inQSearch = depth <= 0,
+                inCheck = board.IsInCheck(),
+                isPV = beta - alpha > 1,
+                canPrune = false;
 
             // Define best eval all the way up here to generate the standing pattern
             int bestEval = -9999999;
