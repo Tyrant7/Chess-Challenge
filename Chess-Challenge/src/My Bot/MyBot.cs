@@ -55,8 +55,7 @@ public class MyBot : IChessBot
     private int PVS(int depth, int alpha, int beta, int searchPly, bool allowNull = true)
     {
         // Declare some reused variables
-        bool inQSearch = depth <= 0,
-            inCheck = board.IsInCheck(),
+        bool inCheck = board.IsInCheck(),
             isPV = beta - alpha > 1,
             canPrune = false,
             notRoot = searchPly++ > 0,
@@ -95,6 +94,12 @@ public class MyBot : IChessBot
                 return score;
         }
 
+        // Check extensions
+        if (inCheck)
+            depth++;
+
+        // Declare QSearch status here to prevent dropping into QSearch while in check
+        bool inQSearch = depth <= 0;
         if (inQSearch)
         {
             // Determine if quiescence search should be continued
@@ -104,43 +109,36 @@ public class MyBot : IChessBot
             if (alpha >= beta)
                 return bestEval;
         }
-        // No extensions, NMP, or TT in QSearch
-        else
+        // No pruning in QSearch
+        // If this node is NOT part of the PV and we're not in check
+        else if (!isPV && !inCheck)
         {
-            // Check extensions
-            if (inCheck)
-                depth++;
+            // Static move pruning
+            int staticEval = Evaluate();
 
-            // If this node is NOT part of the PV and we're not in check
-            if (!isPV && !inCheck)
+            // Give ourselves a margin of 120 centipawns times depth.
+            // If we're up by more than that margin, there's no point in
+            // searching any further since our position is so good
+            if (depth < 3 && staticEval - 120 * depth >= beta)
+                return staticEval - 120 * depth;
+
+            // NULL move pruning
+            if (depth > 2 && allowNull)
             {
-                // Static move pruning
-                int staticEval = Evaluate();
+                board.TrySkipTurn();
+                eval = -PVS(depth - 3, -beta, 1 - beta, searchPly, false);
+                board.UndoSkipTurn();
 
-                // Give ourselves a margin of 120 centipawns times depth.
-                // If we're up by more than that margin, there's no point in
-                // searching any further since our position is so good
-                if (depth < 3 && staticEval - 120 * depth >= beta)
-                    return staticEval - 120 * depth;
-
-                // NULL move pruning
-                if (depth > 2 && allowNull)
-                {
-                    board.TrySkipTurn();
-                    eval = -PVS(depth - 3, -beta, 1 - beta, searchPly, false);
-                    board.UndoSkipTurn();
-
-                    // Failed high on the null move
-                    if (eval >= beta)
-                        return eval;
-                }
-
-                // Extended futility pruning
-                // Can only prune when at lower depth and behind in evaluation by a large margin
-                canPrune = depth <= 8 && staticEval + 40 + depth * 120 <= alpha;
-
-                // TODO: Razoring
+                // Failed high on the null move
+                if (eval >= beta)
+                    return eval;
             }
+
+            // Extended futility pruning
+            // Can only prune when at lower depth and behind in evaluation by a large margin
+            canPrune = depth <= 8 && staticEval + 40 + depth * 120 <= alpha;
+
+            // TODO: Razoring
         }
 
         // Generate appropriate moves depending on whether we're in QSearch
