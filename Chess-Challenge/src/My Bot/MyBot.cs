@@ -58,8 +58,7 @@ public class MyBot : IChessBot
         bool inCheck = board.IsInCheck(),
             isPV = beta - alpha > 1,
             canPrune = false,
-            notRoot = searchPly++ > 0,
-            searchForPV = true;
+            notRoot = searchPly++ > 0;
 
         if (notRoot && board.IsRepeatedPosition())
             return 0;
@@ -161,7 +160,7 @@ public class MyBot : IChessBot
             if (OutOfTime)
                 return 99999999;
 
-            bool tactical = searchForPV || move.IsCapture || move.IsPromotion;
+            bool tactical = movesTried == 0 || move.IsCapture || move.IsPromotion;
             if (canPrune && !tactical)
                 continue;
 
@@ -169,7 +168,7 @@ public class MyBot : IChessBot
 
             // Always fully search the first child, search the rest with a null window
             /*
-            int eval = -PVS(depth - R, searchForPV ? -beta : -alpha - 1, -alpha, searchPly);
+            eval = -PVS(depth - R, searchForPV ? -beta : -alpha - 1, -alpha, searchPly);
 
             // Found a move that can raise alpha, do a research
             if (!searchForPV && alpha < eval && eval < beta)
@@ -222,10 +221,6 @@ public class MyBot : IChessBot
                     break;
                 }
             }
-
-            // Will set it to false if in a regular search,
-            // but in QSearch will always search every node as if it's first
-            searchForPV = inQSearch;
         }
 
         // Transposition table insertion
