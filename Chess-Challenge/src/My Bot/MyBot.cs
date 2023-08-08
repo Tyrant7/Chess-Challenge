@@ -2,11 +2,11 @@
 using System;
 using System.Linq;
 
-// TODO: Tons of token reduction. I can see lots of spots where a few tokens can be saved
-// TODO: Test if old IsDraw and IsCheckmate work better than new detection
+// TODO: Tune NMP, FP, RFP, and LMR
 
 // Heuristics
 // TODO: Aspiration Windows
+// TODO: Razoring
 // TODO: Try to get killers working again
 // TODO: Passed pawn evaluation
 
@@ -144,8 +144,13 @@ public class MyBot : IChessBot
         // Using var to save a single token
         var moves = board.GetLegalMoves(inQSearch && !inCheck).OrderByDescending(move =>
         {
+            // Hash move
             return move == entry.BestMove ? 100000 :
+
+            // MVVLVA
             move.IsCapture ? 1000 * (int)move.CapturePieceType - (int)move.MovePieceType :
+
+            // History
             historyHeuristics[board.IsWhiteToMove ? 1 : 0, (int)move.MovePieceType, move.TargetSquare.Index];
         }).ToArray();
 
@@ -267,7 +272,7 @@ public class MyBot : IChessBot
             int pieceType = 0;
             return decimal.GetBits(packedTable).Take(3)
                 .SelectMany(c => BitConverter.GetBytes(c)
-                    .Select((byte square) => (int)((sbyte)square * 1.461) + PieceValues[pieceType++]))
+                    .Select(square => (int)((sbyte)square * 1.461) + PieceValues[pieceType++]))
                 .ToArray();
         }).ToArray();
     }
@@ -278,9 +283,7 @@ public class MyBot : IChessBot
         foreach (bool sideToMove in new[] { true, false })
         {
             for (int piece = -1, square; ++piece < 6;)
-            {
-                ulong mask = board.GetPieceBitboard((PieceType)piece + 1, sideToMove);
-                while (mask != 0)
+                for (ulong mask = board.GetPieceBitboard((PieceType)piece + 1, sideToMove); mask != 0;)
                 {
                     // Gamephase, middlegame -> endgame
                     gamephase += GamePhaseIncrement[piece];
@@ -290,7 +293,7 @@ public class MyBot : IChessBot
                     middlegame += UnpackedPestoTables[square][piece];
                     endgame += UnpackedPestoTables[square][piece + 6];
                 }
-            }
+
             middlegame = -middlegame;
             endgame = -endgame;
         }
