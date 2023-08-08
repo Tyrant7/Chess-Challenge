@@ -50,12 +50,6 @@ namespace ChessChallenge.Example
         // This method doubles as our PVS and QSearch in order to save tokens
         private int PVS(int depth, int alpha, int beta, int searchPly, bool allowNull = true)
         {
-            // Use this local function when updating alpha to save tokens
-            /*
-            void UpdateAlpha(int contender) => alpha = Math.Max(alpha, contender);
-            */
-
-
             // Declare some reused variables
             bool inQSearch = depth <= 0,
                 inCheck = board.IsInCheck(),

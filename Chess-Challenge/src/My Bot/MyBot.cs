@@ -3,6 +3,7 @@ using System;
 using System.Linq;
 
 // TODO: Tons of token reduction. I can see lots of spots where a few tokens can be saved
+// TODO: Test if old IsDraw and IsCheckmate work better than new detection
 
 // Heuristics
 // TODO: Aspiration Windows
@@ -26,9 +27,7 @@ public class MyBot : IChessBot
     {
         // Cache the board to save precious tokens
         board = newBoard;
-
-        // If having illegal move issues, bring this back and move the out of time check back to top of move loop in PVS
-        // rootMove = board.GetLegalMoves()[0];
+        rootMove = board.GetLegalMoves()[0];
 
         // Reset history heuristics and killer moves
         historyHeuristics = new int[2, 7, 64];
@@ -42,13 +41,10 @@ public class MyBot : IChessBot
         {
             PVS(depth++, -9999999, 9999999, 0);
 
-            // Out of time or found checkmate
-            if (OutOfTime || TTRetrieve.Score > 90000)
-            {
-                Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " + // #DEBUG
-                    TTRetrieve.Score + " centipawns."); // #DEBUG
+            Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms"); // #DEBUG
+
+            if (OutOfTime)
                 return rootMove;
-            }
         }
     }
 
@@ -71,21 +67,23 @@ public class MyBot : IChessBot
         // Define best eval all the way up here to generate the standing pattern for QSearch
         int bestEval = -9999999, 
             originalAlpha = alpha,
-            movesTried = 0;
+            movesTried = 0,
+            nextDepth = depth - 1;
 
         // Transposition table lookup -> Found a valid entry for this position
-        if (TTRetrieve.Hash == board.ZobristKey && notRoot &&
-            TTRetrieve.Depth >= depth)
+        TTEntry entry = transpositionTable[board.ZobristKey & 0x3FFFFF];
+        if (entry.Hash == board.ZobristKey && notRoot &&
+            entry.Depth >= depth)
         {
             // Cache this value to save tokens by not referencing using the . operator
-            int score = TTRetrieve.Score;
+            int score = entry.Score;
 
             // Exact
-            if (TTRetrieve.Flag == 1)
+            if (entry.Flag == 1)
                 return score;
 
             // Lowerbound
-            if (TTRetrieve.Flag == -1)
+            if (entry.Flag == -1)
                 alpha = Math.Max(alpha, score);
             // Upperbound
             else
@@ -147,7 +145,7 @@ public class MyBot : IChessBot
         // Using var to save a single token
         var moves = board.GetLegalMoves(inQSearch && !inCheck).OrderByDescending(move =>
         {
-            return move == TTRetrieve.BestMove ? 100000 :
+            return move == entry.BestMove ? 100000 :
             move.IsCapture ? 1000 * (int)move.CapturePieceType - (int)move.MovePieceType :
             historyHeuristics[board.IsWhiteToMove ? 1 : 0, (int)move.MovePieceType, move.TargetSquare.Index];
         }).ToArray();
@@ -159,6 +157,10 @@ public class MyBot : IChessBot
         Move bestMove = default;
         foreach (Move move in moves)
         {
+            // Return a large value guaranteed to be greater than beta
+            if (OutOfTime)
+                return 99999999;
+
             bool tactical = searchForPV || move.IsCapture || move.IsPromotion;
             if (canPrune && !tactical)
                 continue;
@@ -181,25 +183,22 @@ public class MyBot : IChessBot
             int eval;
             if (movesTried++ == 0 || inQSearch)
                 // Always search first node with full depth
-                eval = -PVS(depth - 1, -beta, -alpha, searchPly);
+                eval = -PVS(nextDepth, -beta, -alpha, searchPly);
             else
             {
                 // LMR conditions
-                if (isPV || tactical || movesTried < 8 || depth < 3 || inCheck || board.IsInCheck())
+                eval = isPV || tactical || movesTried < 8 || depth < 3 || inCheck || board.IsInCheck()
                     // Do a full search
-                    eval = alpha + 1;
-                else
+                    ? alpha + 1
                     // We're good to reduce -> search with reduced depth and a null window, and if we can raise alpha
-                    eval = -PVS(depth - 1 - depth / 3, -alpha - 1, -alpha, searchPly);
+                    : eval = -PVS(nextDepth - depth / 3, -alpha - 1, -alpha, searchPly);
 
-                if (eval > alpha)
-                {
-                    // Search with a null window
-                    eval = -PVS(depth - 1, -alpha - 1, -alpha, searchPly);
-                    if (alpha < eval && eval < beta)
-                        // We raised alpha, research with no null window
-                        eval = -PVS(depth - 1, -beta, -alpha, searchPly);
-                }
+                // If we raised alpha with the reduced depth
+                if (eval > alpha && 
+                    // Update eval with a search with a null window - disgusting syntax that saves a few tokens
+                    alpha < (eval = -PVS(nextDepth, -alpha - 1, -alpha, searchPly)) && eval < beta)
+                    // We raised alpha on the null window search, research with no null window
+                    eval = -PVS(nextDepth, -beta, -alpha, searchPly);
             }
 
             board.UndoMove(move);
@@ -224,11 +223,6 @@ public class MyBot : IChessBot
                     break;
                 }
             }
-
-            // Return a large value guaranteed to be greater than beta
-            // Wait until after at least one move has been searched to exit the move loop so there are no pesky illegal moves
-            if (OutOfTime)
-                return 99999999;
 
             // Will set it to false if in a regular search,
             // but in QSearch will always search every node as if it's first
@@ -316,9 +310,6 @@ public class MyBot : IChessBot
     // 0x400000 represents the rough number of entries it would take to fill 256mb
     // Very lowballed to make sure I don't go over
     private readonly TTEntry[] transpositionTable = new TTEntry[0x400000];
-
-    private TTEntry TTRetrieve
-        => transpositionTable[board.ZobristKey & 0x3FFFFF];
 
     // public enum Flag
     // {
