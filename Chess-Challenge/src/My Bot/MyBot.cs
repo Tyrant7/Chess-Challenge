@@ -68,7 +68,8 @@ public class MyBot : IChessBot
         int bestEval = -9999999, 
             originalAlpha = alpha,
             movesTried = 0,
-            nextDepth = depth - 1;
+            nextDepth = depth - 1,
+            eval;
 
         // Transposition table lookup -> Found a valid entry for this position
         TTEntry entry = transpositionTable[board.ZobristKey & 0x3FFFFF];
@@ -83,7 +84,7 @@ public class MyBot : IChessBot
                 return score;
 
             // Lowerbound
-            if (entry.Flag == -1)
+            if (entry.Flag == 3)
                 alpha = Math.Max(alpha, score);
             // Upperbound
             else
@@ -125,7 +126,7 @@ public class MyBot : IChessBot
                 if (depth > 2 && allowNull)
                 {
                     board.TrySkipTurn();
-                    int eval = -PVS(depth - 3, -beta, 1 - beta, searchPly, false);
+                    eval = -PVS(depth - 3, -beta, 1 - beta, searchPly, false);
                     board.UndoSkipTurn();
 
                     // Failed high on the null move
@@ -179,11 +180,13 @@ public class MyBot : IChessBot
                 eval = -PVS(depth - 1, -beta, -alpha, searchPly);
             */
 
+            // Evil local method to save tokens for similar calls to PVS
+            int Search(int newDepth, int newAlpha) => -PVS(newDepth, -newAlpha, -alpha, searchPly);
+
             // Current work in progress LMR (around +40 elo)
-            int eval;
             if (movesTried++ == 0 || inQSearch)
                 // Always search first node with full depth
-                eval = -PVS(nextDepth, -beta, -alpha, searchPly);
+                eval = Search(nextDepth, beta);
             else
             {
                 // LMR conditions
@@ -191,14 +194,14 @@ public class MyBot : IChessBot
                     // Do a full search
                     ? alpha + 1
                     // We're good to reduce -> search with reduced depth and a null window, and if we can raise alpha
-                    : eval = -PVS(nextDepth - depth / 3, -alpha - 1, -alpha, searchPly);
+                    : Search(nextDepth - depth / 3, alpha + 1);
 
-                // If we raised alpha with the reduced depth
+                // If we raised alpha with the reduced depth search
                 if (eval > alpha && 
                     // Update eval with a search with a null window - disgusting syntax that saves a few tokens
-                    alpha < (eval = -PVS(nextDepth, -alpha - 1, -alpha, searchPly)) && eval < beta)
+                    alpha < (eval = Search(nextDepth, alpha + 1)) && eval < beta)
                     // We raised alpha on the null window search, research with no null window
-                    eval = -PVS(nextDepth, -beta, -alpha, searchPly);
+                    eval = Search(nextDepth, beta);
             }
 
             board.UndoMove(move);
@@ -235,7 +238,7 @@ public class MyBot : IChessBot
             bestMove,
             bestEval,
             depth,
-            bestEval >= beta ? -1 : bestEval <= originalAlpha ? 2 : 1);
+            bestEval >= beta ? 3 : bestEval <= originalAlpha ? 2 : 1);
 
         return bestEval;
     }
@@ -265,6 +268,7 @@ public class MyBot : IChessBot
 
     private readonly int[][] UnpackedPestoTables;
 
+    // TODO: optimize
     public MyBot()
     {
         UnpackedPestoTables = new int[64][];
@@ -315,8 +319,8 @@ public class MyBot : IChessBot
     // {
     //     0 = Invalid,
     //     1 = Exact
-    //    -1 = Lowerbound,
     //     2 = Upperbound
+    //     3 = Lowerbound,
     // }
     private record struct TTEntry(ulong Hash, Move BestMove, int Score, int Depth, int Flag);
 
