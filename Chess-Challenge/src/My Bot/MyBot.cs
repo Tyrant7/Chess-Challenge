@@ -37,11 +37,12 @@ public class MyBot : IChessBot
         searchTimer = timer;
 
         // Progressively increase search depth, starting from 2
-        for (int depth = 2; ;)
+        for (int depth = 1; ;)
         {
-            PVS(depth++, -9999999, 9999999, 0);
+            PVS(++depth, -9999999, 9999999, 0);
 
-            Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms"); // #DEBUG
+            Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " + // #DEBUG
+                transpositionTable[board.ZobristKey & 0x3FFFFF].Score + " centipawns"); // #DEBUG
 
             if (OutOfTime)
                 return rootMove;
@@ -158,7 +159,7 @@ public class MyBot : IChessBot
         Move bestMove = default;
         foreach (Move move in moves)
         {
-            // Return a large value guaranteed to be greater than beta
+            // Return a large value guaranteed to be less than alpha when negated
             if (OutOfTime)
                 return 99999999;
 
@@ -167,9 +168,6 @@ public class MyBot : IChessBot
                 continue;
 
             board.MakeMove(move);
-
-            // Make sure there are no checks before or after the move was played
-            // int R = (notPV && !tactical && tried++ > 6 && !inCheck && !board.IsInCheck()) ? 2 : 1;
 
             // Always fully search the first child, search the rest with a null window
             /*
@@ -271,7 +269,6 @@ public class MyBot : IChessBot
     // TODO: optimize
     public MyBot()
     {
-        UnpackedPestoTables = new int[64][];
         UnpackedPestoTables = PackedPestoTables.Select(packedTable =>
         {
             int pieceType = 0;
@@ -315,7 +312,7 @@ public class MyBot : IChessBot
     // Very lowballed to make sure I don't go over
     private readonly TTEntry[] transpositionTable = new TTEntry[0x400000];
 
-    // public enum Flag
+    // enum Flag
     // {
     //     0 = Invalid,
     //     1 = Exact

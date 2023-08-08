@@ -31,17 +31,15 @@ namespace ChessChallenge.Example
             searchTimer = timer;
 
             // Progressively increase search depth, starting from 2
-            for (int depth = 2; ;)
+            for (int depth = 1; ;)
             {
-                PVS(depth++, -9999999, 9999999, 0);
+                PVS(++depth, -9999999, 9999999, 0);
 
-                // Out of time or found checkmate
-                if (OutOfTime || TTRetrieve.Score > 90000)
-                {
-                    Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " + // #DEBUG
-                        TTRetrieve.Score + " centipawns."); // #DEBUG
+                Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " + // #DEBUG
+                    transpositionTable[board.ZobristKey & 0x3FFFFF].Score + " centipawns"); // #DEBUG
+
+                if (OutOfTime)
                     return rootMove;
-                }
             }
         }
 
@@ -64,21 +62,24 @@ namespace ChessChallenge.Example
             // Define best eval all the way up here to generate the standing pattern for QSearch
             int bestEval = -9999999,
                 originalAlpha = alpha,
-                movesTried = 0;
+                movesTried = 0,
+                nextDepth = depth - 1,
+                eval;
 
             // Transposition table lookup -> Found a valid entry for this position
-            if (TTRetrieve.Hash == board.ZobristKey && notRoot &&
-                TTRetrieve.Depth >= depth)
+            TTEntry entry = transpositionTable[board.ZobristKey & 0x3FFFFF];
+            if (entry.Hash == board.ZobristKey && notRoot &&
+                entry.Depth >= depth)
             {
                 // Cache this value to save tokens by not referencing using the . operator
-                int score = TTRetrieve.Score;
+                int score = entry.Score;
 
                 // Exact
-                if (TTRetrieve.Flag == 1)
+                if (entry.Flag == 1)
                     return score;
 
                 // Lowerbound
-                if (TTRetrieve.Flag == -1)
+                if (entry.Flag == 3)
                     alpha = Math.Max(alpha, score);
                 // Upperbound
                 else
@@ -120,7 +121,7 @@ namespace ChessChallenge.Example
                     if (depth > 2 && allowNull)
                     {
                         board.TrySkipTurn();
-                        int eval = -PVS(depth - 3, -beta, 1 - beta, searchPly, false);
+                        eval = -PVS(depth - 3, -beta, 1 - beta, searchPly, false);
                         board.UndoSkipTurn();
 
                         // Failed high on the null move
@@ -140,7 +141,7 @@ namespace ChessChallenge.Example
             // Using var to save a single token
             var moves = board.GetLegalMoves(inQSearch && !inCheck).OrderByDescending(move =>
             {
-                return move == TTRetrieve.BestMove ? 100000 :
+                return move == entry.BestMove ? 100000 :
                 move.IsCapture ? 1000 * (int)move.CapturePieceType - (int)move.MovePieceType :
                 historyHeuristics[board.IsWhiteToMove ? 1 : 0, (int)move.MovePieceType, move.TargetSquare.Index];
             }).ToArray();
@@ -152,7 +153,7 @@ namespace ChessChallenge.Example
             Move bestMove = default;
             foreach (Move move in moves)
             {
-                // Return a large value guaranteed to be greater than beta
+                // Return a large value guaranteed to be less than alpha when negated
                 if (OutOfTime)
                     return 99999999;
 
@@ -161,9 +162,6 @@ namespace ChessChallenge.Example
                     continue;
 
                 board.MakeMove(move);
-
-                // Make sure there are no checks before or after the move was played
-                // int R = (notPV && !tactical && tried++ > 6 && !inCheck && !board.IsInCheck()) ? 2 : 1;
 
                 // Always fully search the first child, search the rest with a null window
                 /*
@@ -174,29 +172,28 @@ namespace ChessChallenge.Example
                     eval = -PVS(depth - 1, -beta, -alpha, searchPly);
                 */
 
+                // Evil local method to save tokens for similar calls to PVS
+                int Search(int newDepth, int newAlpha) => -PVS(newDepth, -newAlpha, -alpha, searchPly);
+
                 // Current work in progress LMR (around +40 elo)
-                int eval;
                 if (movesTried++ == 0 || inQSearch)
                     // Always search first node with full depth
-                    eval = -PVS(depth - 1, -beta, -alpha, searchPly);
+                    eval = Search(nextDepth, beta);
                 else
                 {
                     // LMR conditions
-                    if (isPV || tactical || movesTried < 8 || depth < 3 || inCheck || board.IsInCheck())
+                    eval = isPV || tactical || movesTried < 8 || depth < 3 || inCheck || board.IsInCheck()
                         // Do a full search
-                        eval = alpha + 1;
-                    else
+                        ? alpha + 1
                         // We're good to reduce -> search with reduced depth and a null window, and if we can raise alpha
-                        eval = -PVS(depth - 1 - depth / 3, -alpha - 1, -alpha, searchPly);
+                        : Search(nextDepth - depth / 3, alpha + 1);
 
-                    if (eval > alpha)
-                    {
-                        // Search with a null window
-                        eval = -PVS(depth - 1, -alpha - 1, -alpha, searchPly);
-                        if (alpha < eval && eval < beta)
-                            // We raised alpha, research with no null window
-                            eval = -PVS(depth - 1, -beta, -alpha, searchPly);
-                    }
+                    // If we raised alpha with the reduced depth search
+                    if (eval > alpha &&
+                        // Update eval with a search with a null window - disgusting syntax that saves a few tokens
+                        alpha < (eval = Search(nextDepth, alpha + 1)) && eval < beta)
+                        // We raised alpha on the null window search, research with no null window
+                        eval = Search(nextDepth, beta);
                 }
 
                 board.UndoMove(move);
@@ -233,7 +230,7 @@ namespace ChessChallenge.Example
                 bestMove,
                 bestEval,
                 depth,
-                bestEval >= beta ? -1 : bestEval <= originalAlpha ? 2 : 1);
+                bestEval >= beta ? 3 : bestEval <= originalAlpha ? 2 : 1);
 
             return bestEval;
         }
@@ -263,9 +260,9 @@ namespace ChessChallenge.Example
 
         private readonly int[][] UnpackedPestoTables;
 
+        // TODO: optimize
         public EvilBot()
         {
-            UnpackedPestoTables = new int[64][];
             UnpackedPestoTables = PackedPestoTables.Select(packedTable =>
             {
                 int pieceType = 0;
@@ -309,15 +306,12 @@ namespace ChessChallenge.Example
         // Very lowballed to make sure I don't go over
         private readonly TTEntry[] transpositionTable = new TTEntry[0x400000];
 
-        private TTEntry TTRetrieve
-            => transpositionTable[board.ZobristKey & 0x3FFFFF];
-
-        // public enum Flag
+        // enum Flag
         // {
         //     0 = Invalid,
         //     1 = Exact
-        //    -1 = Lowerbound,
         //     2 = Upperbound
+        //     3 = Lowerbound,
         // }
         private record struct TTEntry(ulong Hash, Move BestMove, int Score, int Depth, int Flag);
 
