@@ -251,7 +251,7 @@ public class MyBot : IChessBot
 
     // None, Pawn, Knight, Bishop, Rook, Queen, King 
     private readonly short[] PieceValues = { 82, 337, 365, 477, 1025, 0, // Middlegame
-                                             94, 281, 297, 512, 936, 0}; // Endgame
+                                             94, 281, 297, 512, 936, 0 }; // Endgame
 
     // Big table packed with data from premade piece square tables
     // Unpack using PackedEvaluationTables[set, rank] = file
@@ -282,17 +282,17 @@ public class MyBot : IChessBot
 
     private int Evaluate()
     {
-        int middlegame = 0, endgame = 0, gamephase = 0;
-        foreach (bool sideToMove in new[] { true, false })
+        int middlegame = 0, endgame = 0, gamephase = 0, sideToMove = 2;
+        for (; --sideToMove >= 0;)
         {
             for (int piece = -1, square; ++piece < 6;)
-                for (ulong mask = board.GetPieceBitboard((PieceType)piece + 1, sideToMove); mask != 0;)
+                for (ulong mask = board.GetPieceBitboard((PieceType)piece + 1, sideToMove > 0); mask != 0;)
                 {
                     // Gamephase, middlegame -> endgame
                     gamephase += GamePhaseIncrement[piece];
 
                     // Material and square evaluation
-                    square = BitboardHelper.ClearAndGetIndexOfLSB(ref mask) ^ (sideToMove ? 56 : 0);
+                    square = BitboardHelper.ClearAndGetIndexOfLSB(ref mask) ^ 56 * sideToMove;
                     middlegame += UnpackedPestoTables[square][piece];
                     endgame += UnpackedPestoTables[square][piece + 6];
                 }
