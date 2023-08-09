@@ -16,9 +16,6 @@ public class MyBot : IChessBot
     private int searchMaxTime;
     private Timer searchTimer;
 
-    // Only returns true when out of time AND a move has been found
-    private bool OutOfTime => searchTimer.MillisecondsElapsedThisTurn > searchMaxTime;
-
     private int[,,] historyHeuristics;
 
     Board board;
@@ -45,7 +42,8 @@ public class MyBot : IChessBot
             Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " + // #DEBUG
                 transpositionTable[board.ZobristKey & 0x3FFFFF].Score + " centipawns"); // #DEBUG
 
-            if (OutOfTime)
+            // Out of time
+            if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime)
                 return rootMove;
         }
     }
@@ -162,8 +160,8 @@ public class MyBot : IChessBot
         Move bestMove = default;
         foreach (Move move in moves)
         {
-            // Return a large value guaranteed to be less than alpha when negated
-            if (OutOfTime)
+            // Out of time => return a large value guaranteed to be less than alpha when negated
+            if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime)
                 return 99999999;
 
             bool tactical = movesTried == 0 || move.IsCapture || move.IsPromotion;
@@ -172,38 +170,43 @@ public class MyBot : IChessBot
 
             board.MakeMove(move);
 
-            // Always fully search the first child, search the rest with a null window
-            /*
-            eval = -PVS(depth - R, searchForPV ? -beta : -alpha - 1, -alpha, searchPly);
-
-            // Found a move that can raise alpha, do a research
-            if (!searchForPV && alpha < eval && eval < beta)
-                eval = -PVS(depth - 1, -beta, -alpha, searchPly);
-            */
-
             // Evil local method to save tokens for similar calls to PVS
             int Search(int newDepth, int newAlpha) => -PVS(newDepth, -newAlpha, -alpha, searchPly);
 
-            // Current work in progress LMR (around +40 elo)
+            //////////////////////////////////////////////////////
+            ////                                              ////
+            ////                                              ////
+            ////     [You're about to see some terrible]      ////
+            //// [disgusting syntax that saves a few tokens]  ////
+            ////                                              ////
+            ////                                              ////
+            ////                                              ////
+            //////////////////////////////////////////////////////
+
+            // LMR + PVS
             if (movesTried++ == 0 || inQSearch)
                 // Always search first node with full depth
                 eval = Search(nextDepth, beta);
-            else
-            {
-                // LMR conditions
-                eval = isPV || tactical || movesTried < 8 || depth < 3 || inCheck || board.IsInCheck()
-                    // Do a full search
-                    ? alpha + 1
-                    // We're good to reduce -> search with reduced depth and a null window, and if we can raise alpha
-                    : Search(nextDepth - depth / 3, alpha + 1);
 
-                // If we raised alpha with the reduced depth search
-                if (eval > alpha && 
-                    // Update eval with a search with a null window - disgusting syntax that saves a few tokens
+            // Set eval to appropriate alpha to be read from later
+            // -> if reduction is applicable do a reduced search with a null window,
+            // othewise automatically set alpha be above the threshold
+            else if ((eval = isPV || tactical || movesTried < 8 || depth < 3 || inCheck || board.IsInCheck()
+                    ? alpha + 1
+                    : Search(nextDepth - depth / 3, alpha + 1)) > alpha &&
+
+                    // If alpha was above threshold, update eval with a search with a null window
                     alpha < (eval = Search(nextDepth, alpha + 1)) && eval < beta)
-                    // We raised alpha on the null window search, research with no null window
-                    eval = Search(nextDepth, beta);
-            }
+                        // We raised alpha on the null window search, research with no null window
+                        eval = Search(nextDepth, beta);
+
+            //////////////////////////////////////////////
+            ////                                      ////
+            ////       [~ Exiting syntax hell ~]      ////
+            ////           [Or so you think]          ////
+            ////                                      ////
+            ////                                      ////
+            //////////////////////////////////////////////
 
             board.UndoMove(move);
 
