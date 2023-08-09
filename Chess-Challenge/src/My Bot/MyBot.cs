@@ -2,6 +2,7 @@
 using System;
 using System.Linq;
 
+// TODO: Test new token optimizations to make sure they actually worked and didn't break anything
 // TODO: Tune NMP, FP, RFP, and LMR
 
 // Heuristics
@@ -118,14 +119,14 @@ public class MyBot : IChessBot
             // Give ourselves a margin of 120 centipawns times depth.
             // If we're up by more than that margin, there's no point in
             // searching any further since our position is so good
-            if (depth < 3 && staticEval - 120 * depth >= beta)
-                return staticEval - 120 * depth;
+            if (staticEval - 100 * depth >= beta)
+                return staticEval - 100 * depth;
 
             // NULL move pruning
-            if (depth > 2 && allowNull)
+            if (allowNull)
             {
                 board.TrySkipTurn();
-                eval = -PVS(depth - 3, -beta, 1 - beta, searchPly, false);
+                eval = -PVS(depth - 3 - depth / 5, -beta, 1 - beta, searchPly, false);
                 board.UndoSkipTurn();
 
                 // Failed high on the null move
@@ -135,7 +136,7 @@ public class MyBot : IChessBot
 
             // Extended futility pruning
             // Can only prune when at lower depth and behind in evaluation by a large margin
-            canPrune = depth <= 8 && staticEval + 40 + depth * 120 <= alpha;
+            canPrune = staticEval + 40 + depth * 120 <= alpha;
 
             // TODO: Razoring
         }
@@ -264,7 +265,6 @@ public class MyBot : IChessBot
 
     private readonly int[][] UnpackedPestoTables;
 
-    // TODO: optimize
     public MyBot()
     {
         UnpackedPestoTables = PackedPestoTables.Select(packedTable =>
