@@ -9,9 +9,6 @@ namespace ChessChallenge.Example
         private int searchMaxTime;
         private Timer searchTimer;
 
-        // Only returns true when out of time AND a move has been found
-        private bool OutOfTime => searchTimer.MillisecondsElapsedThisTurn > searchMaxTime;
-
         private int[,,] historyHeuristics;
 
         Board board;
@@ -38,7 +35,8 @@ namespace ChessChallenge.Example
                 Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " + // #DEBUG
                     transpositionTable[board.ZobristKey & 0x3FFFFF].Score + " centipawns"); // #DEBUG
 
-                if (OutOfTime)
+                // Out of time
+                if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime)
                     return rootMove;
             }
         }
@@ -129,7 +127,7 @@ namespace ChessChallenge.Example
 
                 // Extended futility pruning
                 // Can only prune when at lower depth and behind in evaluation by a large margin
-                canPrune = staticEval + 40 + depth * 120 <= alpha;
+                canPrune = staticEval + depth * 120 <= alpha;
 
                 // TODO: Razoring
             }
@@ -155,8 +153,8 @@ namespace ChessChallenge.Example
             Move bestMove = default;
             foreach (Move move in moves)
             {
-                // Return a large value guaranteed to be less than alpha when negated
-                if (OutOfTime)
+                // Out of time => return a large value guaranteed to be less than alpha when negated
+                if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime)
                     return 99999999;
 
                 bool tactical = movesTried == 0 || move.IsCapture || move.IsPromotion;
@@ -246,7 +244,7 @@ namespace ChessChallenge.Example
 
         // None, Pawn, Knight, Bishop, Rook, Queen, King 
         private readonly short[] PieceValues = { 82, 337, 365, 477, 1025, 0, // Middlegame
-                                             94, 281, 297, 512, 936, 0}; // Endgame
+                                             94, 281, 297, 512, 936, 0 }; // Endgame
 
         // Big table packed with data from premade piece square tables
         // Unpack using PackedEvaluationTables[set, rank] = file
@@ -269,25 +267,26 @@ namespace ChessChallenge.Example
             {
                 int pieceType = 0;
                 return decimal.GetBits(packedTable).Take(3)
-                    .SelectMany(c => BitConverter.GetBytes(c)
+                    .SelectMany(bit => BitConverter.GetBytes(bit)
                         .Select(square => (int)((sbyte)square * 1.461) + PieceValues[pieceType++]))
                     .ToArray();
+
             }).ToArray();
         }
 
         private int Evaluate()
         {
-            int middlegame = 0, endgame = 0, gamephase = 0;
-            foreach (bool sideToMove in new[] { true, false })
+            int middlegame = 0, endgame = 0, gamephase = 0, sideToMove = 2;
+            for (; --sideToMove >= 0;)
             {
                 for (int piece = -1, square; ++piece < 6;)
-                    for (ulong mask = board.GetPieceBitboard((PieceType)piece + 1, sideToMove); mask != 0;)
+                    for (ulong mask = board.GetPieceBitboard((PieceType)piece + 1, sideToMove > 0); mask != 0;)
                     {
                         // Gamephase, middlegame -> endgame
                         gamephase += GamePhaseIncrement[piece];
 
                         // Material and square evaluation
-                        square = BitboardHelper.ClearAndGetIndexOfLSB(ref mask) ^ (sideToMove ? 56 : 0);
+                        square = BitboardHelper.ClearAndGetIndexOfLSB(ref mask) ^ 56 * sideToMove;
                         middlegame += UnpackedPestoTables[square][piece];
                         endgame += UnpackedPestoTables[square][piece + 6];
                     }

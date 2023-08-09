@@ -228,7 +228,7 @@ public class PieceTableGenerator
         {
             int pieceType = 0;
             return decimal.GetBits(packedTable).Take(3)
-                .SelectMany(c => BitConverter.GetBytes(c)
+                .SelectMany(bit => BitConverter.GetBytes(bit)
                     .Select(square => (int)((sbyte)square * 1.461) + PieceValues[pieceType++]))
                 .ToArray();
         }).ToArray();

@@ -2,14 +2,14 @@
 using System;
 using System.Linq;
 
-// TODO: Test new token optimizations to make sure they actually worked and didn't break anything
 // TODO: Tune NMP, FP, RFP, and LMR
+// TODO: Test only allowing one null move per branch
 
 // Heuristics
 // TODO: Aspiration Windows
 // TODO: Razoring
 // TODO: Try to get killers working again
-// TODO: Passed pawn evaluation
+// TODO: Tempo bonus
 
 public class MyBot : IChessBot
 {
@@ -37,7 +37,7 @@ public class MyBot : IChessBot
         // Progressively increase search depth, starting from 2
         for (int depth = 1; ;)
         {
-            PVS(++depth, -9999999, 9999999, 0);
+            PVS(++depth, -9999999, 9999999, 0, true);
 
             Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " + // #DEBUG
                 transpositionTable[board.ZobristKey & 0x3FFFFF].Score + " centipawns"); // #DEBUG
@@ -51,7 +51,7 @@ public class MyBot : IChessBot
     #region Search
 
     // This method doubles as our PVS and QSearch in order to save tokens
-    private int PVS(int depth, int alpha, int beta, int searchPly, bool allowNull = true)
+    private int PVS(int depth, int alpha, int beta, int searchPly, bool allowNull)
     {
         // Declare some reused variables
         bool inCheck = board.IsInCheck(),
@@ -92,7 +92,8 @@ public class MyBot : IChessBot
                 return score;
         }
 
-        // Check extensions
+        // Doesn't actually extend while in check since newDepth is used when doing further searched
+        // but prevents dropping into QSearch if in check on a horizon node
         if (inCheck)
             depth++;
 
@@ -134,14 +135,14 @@ public class MyBot : IChessBot
 
             // Extended futility pruning
             // Can only prune when at lower depth and behind in evaluation by a large margin
-            canPrune = staticEval + 40 + depth * 120 <= alpha;
+            canPrune = staticEval + depth * 120 <= alpha;
 
             // TODO: Razoring
         }
 
         // Generate appropriate moves depending on whether we're in QSearch
         // Using var to save a single token
-        var moves = board.GetLegalMoves(inQSearch && !inCheck).OrderByDescending(move =>
+        var moves = board.GetLegalMoves(inQSearch && !inCheck)?.OrderByDescending(move =>
         {
             // Hash move
             return move == entry.BestMove ? 100000 :
@@ -171,7 +172,7 @@ public class MyBot : IChessBot
             board.MakeMove(move);
 
             // Evil local method to save tokens for similar calls to PVS
-            int Search(int newDepth, int newAlpha) => -PVS(newDepth, -newAlpha, -alpha, searchPly);
+            int Search(int newDepth, int newAlpha) => -PVS(newDepth, -newAlpha, -alpha, searchPly, allowNull);
 
             //////////////////////////////////////////////////////
             ////                                              ////
@@ -274,9 +275,10 @@ public class MyBot : IChessBot
         {
             int pieceType = 0;
             return decimal.GetBits(packedTable).Take(3)
-                .SelectMany(c => BitConverter.GetBytes(c)
+                .SelectMany(bit => BitConverter.GetBytes(bit)
                     .Select(square => (int)((sbyte)square * 1.461) + PieceValues[pieceType++]))
                 .ToArray();
+
         }).ToArray();
     }
 
