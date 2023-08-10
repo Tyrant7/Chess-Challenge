@@ -1,12 +1,12 @@
 ﻿using ChessChallenge.API;
 using System;
 using System.Linq;
-using static System.Formats.Asn1.AsnWriter;
 
 // TODO: Tune NMP, FP, RFP, and LMR
 
+// TODO: Test delta pruning vs razoring vs nonalloc move generation
+
 // Heuristics
-// TODO: Aspiration Windows
 // TODO: Razoring
 
 public class MyBot : IChessBot
@@ -44,17 +44,17 @@ public class MyBot : IChessBot
             // Gradual widening
             // Fell outside window, retry with wider window search
             if (eval <= alpha)
-                alpha -= 75;
+                alpha -= 65;
             else if (eval >= beta)
-                beta += 75;
+                beta += 65;
             else
             {
                 Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " + // #DEBUG
                     eval + " centipawns"); // #DEBUG
 
                 // Set up window for next search
-                alpha = eval - 25;
-                beta = eval + 25;
+                alpha = eval - 20;
+                beta = eval + 20;
                 depth++;
             }
         }
@@ -105,8 +105,7 @@ public class MyBot : IChessBot
                 return score;
         }
 
-        // Doesn't actually extend while in check since newDepth is used when doing further searched
-        // but prevents dropping into QSearch if in check on a horizon node
+        // Check extensions
         if (inCheck)
             depth++;
 
@@ -125,10 +124,10 @@ public class MyBot : IChessBot
         // If this node is NOT part of the PV and we're not in check
         else if (!isPV && !inCheck)
         {
-            // Static move pruning
+            // Reverse futility pruning
             int staticEval = Evaluate();
 
-            // Give ourselves a margin of 120 centipawns times depth.
+            // Give ourselves a margin of 85 centipawns times depth.
             // If we're up by more than that margin, there's no point in
             // searching any further since our position is so good
             if (staticEval - 100 * depth >= beta)
@@ -150,7 +149,11 @@ public class MyBot : IChessBot
             // Can only prune when at lower depth and behind in evaluation by a large margin
             canPrune = staticEval + depth * 120 <= alpha;
 
-            // TODO: Razoring
+            // Razoring (reduce depth if up a significant margin at depth 3)
+            /*
+            if (depth == 3 && staticEval + 620 <= alpha)
+                depth--;
+            */
         }
 
         // Generate appropriate moves depending on whether we're in QSearch
@@ -207,7 +210,7 @@ public class MyBot : IChessBot
             // othewise automatically set alpha be above the threshold
             else if ((eval = isPV || tactical || movesTried < 8 || depth < 3 || inCheck || board.IsInCheck()
                     ? alpha + 1
-                    : Search(alpha + 1, 1 + depth / 3)) > alpha &&
+                    : Search(alpha + 1, 3)) > alpha &&
 
                     // If alpha was above threshold, update eval with a search with a null window
                     alpha < (eval = Search(alpha + 1)))

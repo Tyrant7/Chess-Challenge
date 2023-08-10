@@ -39,17 +39,17 @@ namespace ChessChallenge.Example
                 // Gradual widening
                 // Fell outside window, retry with wider window search
                 if (eval <= alpha)
-                    alpha -= 75;
+                    alpha -= 65;
                 else if (eval >= beta)
-                    beta += 75;
+                    beta += 65;
                 else
                 {
                     Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " + // #DEBUG
                         eval + " centipawns"); // #DEBUG
 
                     // Set up window for next search
-                    alpha = eval - 25;
-                    beta = eval + 25;
+                    alpha = eval - 20;
+                    beta = eval + 20;
                     depth++;
                 }
             }
@@ -202,7 +202,7 @@ namespace ChessChallenge.Example
                 // othewise automatically set alpha be above the threshold
                 else if ((eval = isPV || tactical || movesTried < 8 || depth < 3 || inCheck || board.IsInCheck()
                         ? alpha + 1
-                        : Search(alpha + 1, 1 + depth / 3)) > alpha &&
+                        : Search(alpha + 1, 3)) > alpha &&
 
                         // If alpha was above threshold, update eval with a search with a null window
                         alpha < (eval = Search(alpha + 1)))
