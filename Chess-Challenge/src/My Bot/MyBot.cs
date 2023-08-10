@@ -1,15 +1,13 @@
 ﻿using ChessChallenge.API;
 using System;
 using System.Linq;
+using static System.Formats.Asn1.AsnWriter;
 
 // TODO: Tune NMP, FP, RFP, and LMR
-// TODO: Test only allowing one null move per branch
 
 // Heuristics
 // TODO: Aspiration Windows
 // TODO: Razoring
-// TODO: Try to get killers working again
-// TODO: Tempo bonus
 
 public class MyBot : IChessBot
 {
@@ -35,38 +33,53 @@ public class MyBot : IChessBot
         searchTimer = timer;
 
         // Progressively increase search depth, starting from 2
-        for (int depth = 1; ;)
+        for (int depth = 2, alpha = -999999, beta = 999999; ;)
         {
-            PVS(++depth, -9999999, 9999999, 0, true);
-
-            Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " + // #DEBUG
-                transpositionTable[board.ZobristKey & 0x3FFFFF].Score + " centipawns"); // #DEBUG
+            int eval = PVS(depth, alpha, beta, 0, true);
 
             // Out of time
             if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime)
                 return rootMove;
+
+            // Gradual widening
+            // Fell outside window, retry with wider window search
+            if (eval <= alpha)
+                alpha -= 75;
+            else if (eval >= beta)
+                beta += 75;
+            else
+            {
+                Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " + // #DEBUG
+                    eval + " centipawns"); // #DEBUG
+
+                // Set up window for next search
+                alpha = eval - 25;
+                beta = eval + 25;
+                depth++;
+            }
         }
     }
 
     #region Search
 
     // This method doubles as our PVS and QSearch in order to save tokens
-    private int PVS(int depth, int alpha, int beta, int searchPly, bool allowNull)
+    private int PVS(int depth, int alpha, int beta, int plyFromRoot, bool allowNull)
     {
         // Declare some reused variables
         bool inCheck = board.IsInCheck(),
             isPV = beta - alpha > 1,
             canPrune = false,
-            notRoot = searchPly++ > 0;
+            notRoot = plyFromRoot++ > 0;
 
-        if (notRoot && board.IsRepeatedPosition())
+        // Ply check is for long forced endgame draw sequences where search can get stuck forever
+        if (notRoot && board.IsRepeatedPosition() || plyFromRoot > 50)
             return 0;
 
         // Define best eval all the way up here to generate the standing pattern for QSearch
-        int bestEval = -9999999, 
+        int bestEval = -9999999,
             originalAlpha = alpha,
             movesTried = 0,
-            nextDepth = depth - 1,
+            currentTurn = board.IsWhiteToMove ? 1 : 0,
             eval;
 
         // Transposition table lookup -> Found a valid entry for this position
@@ -125,7 +138,7 @@ public class MyBot : IChessBot
             if (allowNull)
             {
                 board.TrySkipTurn();
-                eval = -PVS(depth - 3 - depth / 5, -beta, 1 - beta, searchPly, false);
+                eval = -PVS(depth - 3 - depth / 5, -beta, 1 - beta, plyFromRoot, false);
                 board.UndoSkipTurn();
 
                 // Failed high on the null move
@@ -142,7 +155,7 @@ public class MyBot : IChessBot
 
         // Generate appropriate moves depending on whether we're in QSearch
         // Using var to save a single token
-        var moves = board.GetLegalMoves(inQSearch && !inCheck)?.OrderByDescending(move =>
+        var moves = board.GetLegalMoves(inQSearch && !inCheck).OrderByDescending(move =>
         {
             // Hash move
             return move == entry.BestMove ? 100000 :
@@ -151,12 +164,12 @@ public class MyBot : IChessBot
             move.IsCapture ? 1000 * (int)move.CapturePieceType - (int)move.MovePieceType :
 
             // History
-            historyHeuristics[board.IsWhiteToMove ? 1 : 0, (int)move.MovePieceType, move.TargetSquare.Index];
+            historyHeuristics[currentTurn, (int)move.MovePieceType, move.TargetSquare.Index];
         }).ToArray();
 
         // Gamestate, checkmate and draws
         if (!inQSearch && moves.Length == 0)
-            return inCheck ? searchPly - 99999 : 0;
+            return inCheck ? plyFromRoot - 99999 : 0;
 
         Move bestMove = default;
         foreach (Move move in moves)
@@ -171,9 +184,6 @@ public class MyBot : IChessBot
 
             board.MakeMove(move);
 
-            // Evil local method to save tokens for similar calls to PVS
-            int Search(int newDepth, int newAlpha) => -PVS(newDepth, -newAlpha, -alpha, searchPly, allowNull);
-
             //////////////////////////////////////////////////////
             ////                                              ////
             ////                                              ////
@@ -184,22 +194,25 @@ public class MyBot : IChessBot
             ////                                              ////
             //////////////////////////////////////////////////////
 
+            // Evil local method to save tokens for similar calls to PVS
+            int Search(int newAlpha, int R = 1) => -PVS(depth - R, -newAlpha, -alpha, plyFromRoot, allowNull);
+
             // LMR + PVS
             if (movesTried++ == 0 || inQSearch)
                 // Always search first node with full depth
-                eval = Search(nextDepth, beta);
+                eval = Search(beta);
 
             // Set eval to appropriate alpha to be read from later
             // -> if reduction is applicable do a reduced search with a null window,
             // othewise automatically set alpha be above the threshold
             else if ((eval = isPV || tactical || movesTried < 8 || depth < 3 || inCheck || board.IsInCheck()
                     ? alpha + 1
-                    : Search(nextDepth - depth / 3, alpha + 1)) > alpha &&
+                    : Search(alpha + 1, 1 + depth / 3)) > alpha &&
 
                     // If alpha was above threshold, update eval with a search with a null window
-                    alpha < (eval = Search(nextDepth, alpha + 1)) && eval < beta)
-                        // We raised alpha on the null window search, research with no null window
-                        eval = Search(nextDepth, beta);
+                    alpha < (eval = Search(alpha + 1)))
+                // We raised alpha on the null window search, research with no null window
+                eval = Search(beta);
 
             //////////////////////////////////////////////
             ////                                      ////
@@ -227,7 +240,7 @@ public class MyBot : IChessBot
                 {
                     // Update history tables
                     if (!move.IsCapture)
-                        historyHeuristics[board.IsWhiteToMove ? 1 : 0, (int)move.MovePieceType, move.TargetSquare.Index] += depth * depth;
+                        historyHeuristics[currentTurn, (int)move.MovePieceType, move.TargetSquare.Index] += depth * depth;
                     break;
                 }
             }
@@ -250,7 +263,7 @@ public class MyBot : IChessBot
 
     private readonly int[] GamePhaseIncrement = { 0, 1, 1, 2, 4, 0 };
 
-    // None, Pawn, Knight, Bishop, Rook, Queen, King 
+    // Pawn, Knight, Bishop, Rook, Queen, King 
     private readonly short[] PieceValues = { 82, 337, 365, 477, 1025, 0, // Middlegame
                                              94, 281, 297, 512, 936, 0 }; // Endgame
 
@@ -302,7 +315,8 @@ public class MyBot : IChessBot
             middlegame = -middlegame;
             endgame = -endgame;
         }
-        return (middlegame * gamephase + endgame * (24 - gamephase)) / 24 * (board.IsWhiteToMove ? 1 : -1);
+                                                                                                   // Tempo bonus to help with aspiration windows
+        return (middlegame * gamephase + endgame * (24 - gamephase)) / 24 * (board.IsWhiteToMove ? 1 : -1) + gamephase / 2;
     }
 
     #endregion
