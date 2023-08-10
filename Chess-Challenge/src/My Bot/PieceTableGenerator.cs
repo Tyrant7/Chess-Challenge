@@ -224,15 +224,14 @@ public class PieceTableGenerator
     // pestoUnpacked[square][pieceType]
     private static int[][] UnpackData(decimal[] tablesToUnpack)
     {
-        var pestoUnpacked = new int[tableSize][];
-        for (int i = 0; i < tableSize; i++)
+        var pestoUnpacked = tablesToUnpack.Select(packedTable =>
         {
             int pieceType = 0;
-            pestoUnpacked[i] = decimal.GetBits(tablesToUnpack[i]).Take(3)
-                .SelectMany(c => BitConverter.GetBytes(c)
-                    .Select((byte square) => (int)((sbyte)square * 1.461) + PieceValues[pieceType++]))
+            return decimal.GetBits(packedTable).Take(3)
+                .SelectMany(bit => BitConverter.GetBytes(bit)
+                    .Select(square => (int)((sbyte)square * 1.461) + PieceValues[pieceType++]))
                 .ToArray();
-        }
+        }).ToArray();
 
         return pestoUnpacked;
     }
