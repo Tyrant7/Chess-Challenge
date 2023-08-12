@@ -5,6 +5,8 @@ using System.Linq;
 // TODO: Tune NMP, FP, RFP, and LMR
 
 // TODO: Test delta pruning vs razoring vs nonalloc move generation
+// TODO: Fix broken checkmates - tentative
+// TODO: Retest parity pruning
 
 // Heuristics
 // TODO: Razoring
