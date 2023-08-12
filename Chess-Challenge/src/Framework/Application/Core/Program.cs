@@ -2,6 +2,7 @@
 using ChessChallenge.UCI;
 using Raylib_cs;
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -15,6 +16,7 @@ namespace ChessChallenge.Application
 
         public static void Main(string[] args)
         {
+            // Cutechess
             if (args.Length == 1 && args[0].Contains("cutechess"))
             {
                 string argstr = args[0].Substring(args[0].IndexOf("uci"));
@@ -31,6 +33,7 @@ namespace ChessChallenge.Application
                     return;
                 }
             }
+            // Plain UCI
             if (args.Length > 1 && args[0] == "uci")
             {
                 Console.WriteLine("Starting up in UCI mode...");
@@ -130,7 +133,7 @@ namespace ChessChallenge.Application
             File.WriteAllText(FileHelper.PrefsFilePath, isBigWindow ? "1" : "0");
         }
 
-        public static void StartUCI(string[] args)
+        private static void StartUCI(string[] args)
         {
             ChallengeController.PlayerType player;
             bool success = Enum.TryParse(args[1], out player);

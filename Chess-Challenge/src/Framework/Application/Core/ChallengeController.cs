@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using static ChessChallenge.Application.Settings;
 using static ChessChallenge.Application.ConsoleHelper;
+using Chess_Challenge.src.Tuning;
 
 namespace ChessChallenge.Application
 {
@@ -19,7 +20,9 @@ namespace ChessChallenge.Application
         {
             Human,
             MyBot,
-            EvilBot
+            EvilBot,
+            TunedBotA,
+            TunedBotB
         }
 
         // Game state
@@ -119,6 +122,8 @@ namespace ChessChallenge.Application
             {
                 PlayerType.MyBot => new MyBot(),
                 PlayerType.EvilBot => new EvilBot(),
+                PlayerType.TunedBotA => Tuner.NewBot(true),
+                PlayerType.TunedBotB => Tuner.NewBot(false),
                 // If you have other bot types, you can add them here as well
                 _ => null
             };
@@ -221,6 +226,8 @@ namespace ChessChallenge.Application
             {
                 PlayerType.MyBot => new ChessPlayer(new MyBot(), type, GameDurationMilliseconds),
                 PlayerType.EvilBot => new ChessPlayer(new EvilBot(), type, GameDurationMilliseconds),
+                PlayerType.TunedBotA => new ChessPlayer(Tuner.NewBot(true), type, GameDurationMilliseconds),
+                PlayerType.TunedBotB => new ChessPlayer(Tuner.NewBot(false), type, GameDurationMilliseconds),
                 _ => new ChessPlayer(new HumanPlayer(boardUI), type)
             };
         }
