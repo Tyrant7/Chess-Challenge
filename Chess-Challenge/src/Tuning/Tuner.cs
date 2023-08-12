@@ -19,10 +19,12 @@ namespace Chess_Challenge.src.Tuning
         };
 
         private static readonly string EvalFileName = "Evaluation.weights";
-        private static readonly string EngineFilePath = "D:\\Users\\tyler\\Chess-Challenge\\Chess-Challenge\\bin\\Debug\\net6.0";
 
-        private static string FilePathA => Path.Combine(EngineFilePath, "A-" + EvalFileName);
-        private static string FilePathB => Path.Combine(EngineFilePath, "B-" + EvalFileName);
+        // Change file path to your engine's build directory
+        private static readonly string BuildDirectory = "D:\\Users\\tyler\\Chess-Challenge\\Chess-Challenge\\bin\\Debug\\net6.0";
+
+        private static string FilePathA => Path.Combine(BuildDirectory, "A-" + EvalFileName);
+        private static string FilePathB => Path.Combine(BuildDirectory, "B-" + EvalFileName);
 
         public static TunedBot NewBot(bool isA)
         {
