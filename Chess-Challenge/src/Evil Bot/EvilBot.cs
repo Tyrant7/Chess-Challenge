@@ -100,8 +100,7 @@ namespace ChessChallenge.Example
                     return score;
             }
 
-            // Doesn't actually extend while in check since newDepth is used when doing further searched
-            // but prevents dropping into QSearch if in check on a horizon node
+            // Check extensions
             if (inCheck)
                 depth++;
 
@@ -120,10 +119,10 @@ namespace ChessChallenge.Example
             // If this node is NOT part of the PV and we're not in check
             else if (!isPV && !inCheck)
             {
-                // Static move pruning
+                // Reverse futility pruning
                 int staticEval = Evaluate();
 
-                // Give ourselves a margin of 120 centipawns times depth.
+                // Give ourselves a margin of 85 centipawns times depth.
                 // If we're up by more than that margin, there's no point in
                 // searching any further since our position is so good
                 if (staticEval - 100 * depth >= beta)
@@ -145,7 +144,11 @@ namespace ChessChallenge.Example
                 // Can only prune when at lower depth and behind in evaluation by a large margin
                 canPrune = staticEval + depth * 120 <= alpha;
 
-                // TODO: Razoring
+                // Razoring (reduce depth if up a significant margin at depth 3)
+                /*
+                if (depth == 3 && staticEval + 620 <= alpha)
+                    depth--;
+                */
             }
 
             // Generate appropriate moves depending on whether we're in QSearch
@@ -310,6 +313,7 @@ namespace ChessChallenge.Example
                 middlegame = -middlegame;
                 endgame = -endgame;
             }
+            // Tempo bonus to help with aspiration windows
             return (middlegame * gamephase + endgame * (24 - gamephase)) / 24 * (board.IsWhiteToMove ? 1 : -1) + gamephase / 2;
         }
 

@@ -2,14 +2,9 @@
 using System;
 using System.Linq;
 
-// TODO: Tune NMP, FP, RFP, and LMR
-
-// TODO: Test delta pruning vs razoring vs nonalloc move generation
-// TODO: Fix broken checkmates - tentative
+// TODO: Test razoring
+// TODO: Fix broken checkmates/blundering in the endgame
 // TODO: Retest parity pruning
-
-// Heuristics
-// TODO: Razoring
 
 public class MyBot : IChessBot
 {
@@ -179,10 +174,6 @@ public class MyBot : IChessBot
         Move bestMove = default;
         foreach (Move move in moves)
         {
-            // Out of time => return a large value guaranteed to be less than alpha when negated
-            if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime)
-                return 99999999;
-
             bool tactical = movesTried == 0 || move.IsCapture || move.IsPromotion;
             if (canPrune && !tactical)
                 continue;
@@ -249,6 +240,10 @@ public class MyBot : IChessBot
                     break;
                 }
             }
+
+            // Out of time => return a large value guaranteed to be less than alpha when negated
+            if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime)
+                return 200000;
         }
 
         // Transposition table insertion
