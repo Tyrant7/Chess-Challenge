@@ -25,6 +25,7 @@ namespace ChessChallenge.Example
 
             // 1/30th of our remaining time, split among all of the moves
             searchMaxTime = timer.MillisecondsRemaining / 30;
+            // searchMaxTime = 2000;
             searchTimer = timer;
 
             // Progressively increase search depth, starting from 2
@@ -118,13 +119,13 @@ namespace ChessChallenge.Example
             // No pruning in QSearch
             // If this node is NOT part of the PV and we're not in check
             // AND we haven't found a mate from either side
-            else if (!isPV && !inCheck)
+            else if (!isPV && !inCheck && alpha > -50000)
             {
                 // Reverse futility pruning
                 int staticEval = Evaluate();
 
-                // Give ourselves a margin of 85 centipawns times depth.
-                // If we're up by more than that margin, there's no point in
+                // Give ourselves a margin of 100 centipawns times depth.
+                // If we're up by more than that margin in material, there's no point in
                 // searching any further since our position is so good
                 if (staticEval - 100 * depth >= beta)
                     return staticEval - 100 * depth;
