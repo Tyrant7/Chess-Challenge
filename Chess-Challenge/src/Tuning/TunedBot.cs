@@ -20,7 +20,6 @@ namespace Chess_Challenge.src.Tuning
         {
             // Cache the board to save precious tokens
             board = newBoard;
-            rootMove = board.GetLegalMoves()[0];
 
             // Reset history heuristics and killer moves
             historyHeuristics = new int[2, 7, 64];
@@ -174,10 +173,6 @@ namespace Chess_Challenge.src.Tuning
             Move bestMove = default;
             foreach (Move move in moves)
             {
-                // Out of time => return a large value guaranteed to be less than alpha when negated
-                if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime)
-                    return 99999999;
-
                 bool tactical = movesTried == 0 || move.IsCapture || move.IsPromotion;
                 if (canPrune && !tactical)
                     continue;
@@ -244,6 +239,10 @@ namespace Chess_Challenge.src.Tuning
                         break;
                     }
                 }
+
+                // Out of time => return a large value guaranteed to be less than alpha when negated
+                if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime)
+                    return 99999999;
             }
 
             // Transposition table insertion

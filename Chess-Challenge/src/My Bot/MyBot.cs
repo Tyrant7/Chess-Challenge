@@ -4,7 +4,7 @@ using System.Linq;
 
 // TODO: Test razoring
 // TODO: Fix broken checkmates/blundering in the endgame
-// TODO: Retest parity pruning
+// TODO: Test depth limited RFP and only returning eval without margin added
 
 public class MyBot : IChessBot
 {
@@ -20,7 +20,6 @@ public class MyBot : IChessBot
     {
         // Cache the board to save precious tokens
         board = newBoard;
-        rootMove = board.GetLegalMoves()[0];
 
         // Reset history heuristics and killer moves
         historyHeuristics = new int[2, 7, 64];
@@ -243,7 +242,7 @@ public class MyBot : IChessBot
 
             // Out of time => return a large value guaranteed to be less than alpha when negated
             if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime)
-                return 200000;
+                return 99999999;
         }
 
         // Transposition table insertion
@@ -310,11 +309,25 @@ public class MyBot : IChessBot
                     square = BitboardHelper.ClearAndGetIndexOfLSB(ref mask) ^ 56 * sideToMove;
                     middlegame += UnpackedPestoTables[square][piece];
                     endgame += UnpackedPestoTables[square][piece + 6];
+
+                    // Bishop pair bonus
+                    if (piece == 2 && mask != 0)
+                    {
+                        middlegame += 22;
+                        endgame += 30;
+                    }
                 }
 
             middlegame = -middlegame;
             endgame = -endgame;
         }
+
+        // Mopup eval
+        /*
+        if (gamephase <= 4 && Math.Abs(endgame) > 400)
+            endgame += board.GetKingSquare(endgame < 0).Index * 2;
+        */
+
                                                                                                    // Tempo bonus to help with aspiration windows
         return (middlegame * gamephase + endgame * (24 - gamephase)) / 24 * (board.IsWhiteToMove ? 1 : -1) + gamephase / 2;
     }
