@@ -27,7 +27,6 @@ public class MyBot : IChessBot
 
         // 1/30th of our remaining time, split among all of the moves
         searchMaxTime = timer.MillisecondsRemaining / 30;
-        // searchMaxTime = 2000;
         searchTimer = timer;
 
         // Progressively increase search depth, starting from 2
@@ -121,7 +120,7 @@ public class MyBot : IChessBot
         // No pruning in QSearch
         // If this node is NOT part of the PV and we're not in check
         // AND we haven't found a mate from either side
-        else if (!isPV && !inCheck && alpha > -50000)
+        else if (!isPV && !inCheck)
         {
             // Reverse futility pruning
             int staticEval = Evaluate();
@@ -129,7 +128,7 @@ public class MyBot : IChessBot
             // Give ourselves a margin of 100 centipawns times depth.
             // If we're up by more than that margin in material, there's no point in
             // searching any further since our position is so good
-            if (staticEval - 100 * depth >= beta)
+            if (depth <= 8 && staticEval - 100 * depth >= beta)
                 return staticEval - 100 * depth;
 
             // NULL move pruning
@@ -146,7 +145,7 @@ public class MyBot : IChessBot
 
             // Extended futility pruning
             // Can only prune when at lower depth and behind in evaluation by a large margin
-            canPrune = staticEval + depth * 120 <= alpha;
+            canPrune = depth <= 8 && staticEval + depth * 120 <= alpha;
 
             // Razoring (reduce depth if up a significant margin at depth 3)
             /*

@@ -119,7 +119,7 @@ namespace Chess_Challenge.src.Tuning
             }
             // No pruning in QSearch
             // If this node is NOT part of the PV and we're not in check
-            else if (!isPV && !inCheck)
+            else if (!isPV && !inCheck && alpha > -50000)
             {
                 // Reverse futility pruning
                 int staticEval = Evaluate();
@@ -127,7 +127,7 @@ namespace Chess_Challenge.src.Tuning
                 // Give ourselves a margin of 85 centipawns times depth.
                 // If we're up by more than that margin, there's no point in
                 // searching any further since our position is so good
-                if (staticEval - p.Parameters["RFPMargin"] * depth >= beta)
+                if (depth <= p.Parameters["RFPDepthMargin"] && staticEval - p.Parameters["RFPMargin"] * depth >= beta)
                     return staticEval - p.Parameters["RFPMargin"] * depth;
 
                 // NULL move pruning
@@ -144,7 +144,7 @@ namespace Chess_Challenge.src.Tuning
 
                 // Extended futility pruning
                 // Can only prune when at lower depth and behind in evaluation by a large margin
-                canPrune = staticEval + depth * p.Parameters["EFPMargin"] <= alpha;
+                canPrune = depth <= p.Parameters["EFPDepthMargin"] && staticEval + depth * p.Parameters["EFPMargin"] <= alpha;
 
                 // Razoring (reduce depth if up a significant margin at depth 3)
                 /*

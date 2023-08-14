@@ -127,7 +127,7 @@ namespace ChessChallenge.Example
                 // Give ourselves a margin of 100 centipawns times depth.
                 // If we're up by more than that margin in material, there's no point in
                 // searching any further since our position is so good
-                if (staticEval - 100 * depth >= beta)
+                if (depth <= 8 && staticEval - 100 * depth >= beta)
                     return staticEval - 100 * depth;
 
                 // NULL move pruning
@@ -144,7 +144,7 @@ namespace ChessChallenge.Example
 
                 // Extended futility pruning
                 // Can only prune when at lower depth and behind in evaluation by a large margin
-                canPrune = staticEval + depth * 120 <= alpha;
+                canPrune = depth <= 8 && staticEval + depth * 120 <= alpha;
 
                 // Razoring (reduce depth if up a significant margin at depth 3)
                 /*
