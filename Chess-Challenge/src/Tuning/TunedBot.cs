@@ -1,6 +1,7 @@
 ﻿using ChessChallenge.API;
 using System;
 using System.Linq;
+using static System.Math;
 
 namespace Chess_Challenge.src.Tuning
 {
@@ -92,10 +93,10 @@ namespace Chess_Challenge.src.Tuning
 
                 // Lowerbound
                 if (entry.Flag == 3)
-                    alpha = Math.Max(alpha, score);
+                    alpha = Max(alpha, score);
                 // Upperbound
                 else
-                    beta = Math.Min(beta, score);
+                    beta = Min(beta, score);
 
                 if (alpha >= beta)
                     return score;
@@ -112,7 +113,7 @@ namespace Chess_Challenge.src.Tuning
                 // Determine if quiescence search should be continued
                 bestEval = Evaluate();
 
-                alpha = Math.Max(alpha, bestEval);
+                alpha = Max(alpha, bestEval);
                 if (alpha >= beta)
                     return bestEval;
             }
@@ -228,7 +229,7 @@ namespace Chess_Challenge.src.Tuning
                     if (!notRoot)
                         rootMove = move;
 
-                    alpha = Math.Max(eval, alpha);
+                    alpha = Max(eval, alpha);
 
                     // Cutoff
                     if (alpha >= beta)
@@ -310,6 +311,13 @@ namespace Chess_Challenge.src.Tuning
                         square = BitboardHelper.ClearAndGetIndexOfLSB(ref mask) ^ 56 * sideToMove;
                         middlegame += UnpackedPestoTables[square][piece];
                         endgame += UnpackedPestoTables[square][piece + 6];
+
+                        // Bishop pair bonus
+                        if (piece == 2 && mask != 0)
+                        {
+                            middlegame += 22;
+                            endgame += 30;
+                        }
                     }
 
                 middlegame = -middlegame;

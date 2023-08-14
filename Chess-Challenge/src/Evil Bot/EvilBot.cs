@@ -1,6 +1,7 @@
 ﻿using ChessChallenge.API;
 using System;
 using System.Linq;
+using static System.Math;
 
 namespace ChessChallenge.Example
 {
@@ -90,10 +91,10 @@ namespace ChessChallenge.Example
 
                 // Lowerbound
                 if (entry.Flag == 3)
-                    alpha = Math.Max(alpha, score);
+                    alpha = Max(alpha, score);
                 // Upperbound
                 else
-                    beta = Math.Min(beta, score);
+                    beta = Min(beta, score);
 
                 if (alpha >= beta)
                     return score;
@@ -110,12 +111,13 @@ namespace ChessChallenge.Example
                 // Determine if quiescence search should be continued
                 bestEval = Evaluate();
 
-                alpha = Math.Max(alpha, bestEval);
+                alpha = Max(alpha, bestEval);
                 if (alpha >= beta)
                     return bestEval;
             }
             // No pruning in QSearch
             // If this node is NOT part of the PV and we're not in check
+            // AND we haven't found a mate from either side
             else if (!isPV && !inCheck)
             {
                 // Reverse futility pruning
@@ -153,16 +155,13 @@ namespace ChessChallenge.Example
             // Generate appropriate moves depending on whether we're in QSearch
             // Using var to save a single token
             var moves = board.GetLegalMoves(inQSearch && !inCheck).OrderByDescending(move =>
-            {
                 // Hash move
-                return move == entry.BestMove ? 100000 :
-
+                move == entry.BestMove ? 100000 :
                 // MVVLVA
                 move.IsCapture ? 1000 * (int)move.CapturePieceType - (int)move.MovePieceType :
-
                 // History
-                historyHeuristics[currentTurn, (int)move.MovePieceType, move.TargetSquare.Index];
-            }).ToArray();
+                historyHeuristics[currentTurn, (int)move.MovePieceType, move.TargetSquare.Index]
+            ).ToArray();
 
             // Gamestate, checkmate and draws
             if (!inQSearch && moves.Length == 0)
@@ -226,7 +225,7 @@ namespace ChessChallenge.Example
                     if (!notRoot)
                         rootMove = move;
 
-                    alpha = Math.Max(eval, alpha);
+                    alpha = Max(eval, alpha);
 
                     // Cutoff
                     if (alpha >= beta)
@@ -307,6 +306,13 @@ namespace ChessChallenge.Example
                         square = BitboardHelper.ClearAndGetIndexOfLSB(ref mask) ^ 56 * sideToMove;
                         middlegame += UnpackedPestoTables[square][piece];
                         endgame += UnpackedPestoTables[square][piece + 6];
+
+                        // Bishop pair bonus
+                        if (piece == 2 && mask != 0)
+                        {
+                            middlegame += 22;
+                            endgame += 30;
+                        }
                     }
 
                 middlegame = -middlegame;

@@ -1,6 +1,7 @@
 ﻿using ChessChallenge.API;
 using System;
 using System.Linq;
+using static System.Math;
 
 // TODO: Test razoring
 // TODO: Fix broken checkmates/blundering in the endgame
@@ -26,6 +27,7 @@ public class MyBot : IChessBot
 
         // 1/30th of our remaining time, split among all of the moves
         searchMaxTime = timer.MillisecondsRemaining / 30;
+        // searchMaxTime = 2000;
         searchTimer = timer;
 
         // Progressively increase search depth, starting from 2
@@ -92,10 +94,10 @@ public class MyBot : IChessBot
 
             // Lowerbound
             if (entry.Flag == 3)
-                alpha = Math.Max(alpha, score);
+                alpha = Max(alpha, score);
             // Upperbound
             else
-                beta = Math.Min(beta, score);
+                beta = Min(beta, score);
 
             if (alpha >= beta)
                 return score;
@@ -112,13 +114,15 @@ public class MyBot : IChessBot
             // Determine if quiescence search should be continued
             bestEval = Evaluate();
 
-            alpha = Math.Max(alpha, bestEval);
+            alpha = Max(alpha, bestEval);
             if (alpha >= beta)
                 return bestEval;
         }
         // No pruning in QSearch
         // If this node is NOT part of the PV and we're not in check
-        else if (!isPV && !inCheck)
+        // AND we haven't found a mate from either side
+        // TODO: Test:  && alpha < 50000
+        else if (!isPV && !inCheck && alpha > -50000)
         {
             // Reverse futility pruning
             int staticEval = Evaluate();
@@ -130,6 +134,7 @@ public class MyBot : IChessBot
                 return staticEval - 100 * depth;
 
             // NULL move pruning
+            // TODO: Test: if (allowNull && beta < 50000 && alpha > -50000)
             if (allowNull)
             {
                 board.TrySkipTurn();
@@ -155,16 +160,13 @@ public class MyBot : IChessBot
         // Generate appropriate moves depending on whether we're in QSearch
         // Using var to save a single token
         var moves = board.GetLegalMoves(inQSearch && !inCheck).OrderByDescending(move =>
-        {
             // Hash move
-            return move == entry.BestMove ? 100000 :
-
+            move == entry.BestMove ? 100000 :
             // MVVLVA
             move.IsCapture ? 1000 * (int)move.CapturePieceType - (int)move.MovePieceType :
-
             // History
-            historyHeuristics[currentTurn, (int)move.MovePieceType, move.TargetSquare.Index];
-        }).ToArray();
+            historyHeuristics[currentTurn, (int)move.MovePieceType, move.TargetSquare.Index]
+        ).ToArray();
 
         // Gamestate, checkmate and draws
         if (!inQSearch && moves.Length == 0)
@@ -228,7 +230,7 @@ public class MyBot : IChessBot
                 if (!notRoot)
                     rootMove = move;
 
-                alpha = Math.Max(eval, alpha);
+                alpha = Max(eval, alpha);
 
                 // Cutoff
                 if (alpha >= beta)
@@ -321,13 +323,6 @@ public class MyBot : IChessBot
             middlegame = -middlegame;
             endgame = -endgame;
         }
-
-        // Mopup eval
-        /*
-        if (gamephase <= 4 && Math.Abs(endgame) > 400)
-            endgame += board.GetKingSquare(endgame < 0).Index * 2;
-        */
-
                                                                                                    // Tempo bonus to help with aspiration windows
         return (middlegame * gamephase + endgame * (24 - gamephase)) / 24 * (board.IsWhiteToMove ? 1 : -1) + gamephase / 2;
     }
