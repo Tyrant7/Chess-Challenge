@@ -227,9 +227,8 @@ public class PieceTableGenerator
         var pestoUnpacked = tablesToUnpack.Select(packedTable =>
         {
             int pieceType = 0;
-            return decimal.GetBits(packedTable).Take(3)
-                .SelectMany(bit => BitConverter.GetBytes(bit)
-                    .Select(square => (int)((sbyte)square * 1.461) + PieceValues[pieceType++]))
+            return new System.Numerics.BigInteger(packedTable).ToByteArray().Take(12)
+                    .Select(square => (int)((sbyte)square * 1.461) + PieceValues[pieceType++])
                 .ToArray();
         }).ToArray();
 

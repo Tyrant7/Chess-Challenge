@@ -39,17 +39,17 @@ namespace ChessChallenge.Example
                 // Gradual widening
                 // Fell outside window, retry with wider window search
                 if (eval <= alpha)
-                    alpha -= 65;
+                    alpha -= 62;
                 else if (eval >= beta)
-                    beta += 65;
+                    beta += 62;
                 else
                 {
                     Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " + // #DEBUG
                         eval + " centipawns"); // #DEBUG
 
                     // Set up window for next search
-                    alpha = eval - 20;
-                    beta = eval + 20;
+                    alpha = eval - 17;
+                    beta = eval + 17;
                     depth++;
                 }
             }
@@ -67,38 +67,37 @@ namespace ChessChallenge.Example
                 notRoot = plyFromRoot++ > 0;
 
             // Ply check is for long forced endgame draw sequences where search can get stuck forever
+            // TODO: test ply check returning static eval below instead of 0
             if (notRoot && board.IsRepeatedPosition() || plyFromRoot > 50)
                 return 0;
+
+            ulong zobristKey = board.ZobristKey;
+            TTEntry entry = transpositionTable[zobristKey & 0x3FFFFF];
 
             // Define best eval all the way up here to generate the standing pattern for QSearch
             int bestEval = -9999999,
                 originalAlpha = alpha,
                 movesTried = 0,
                 currentTurn = board.IsWhiteToMove ? 1 : 0,
+                entryScore = entry.Score,
+                entryFlag = entry.Flag,
                 eval;
 
+            //
+            // Evil local method to save tokens for similar calls to PVS (set eval inside search)
+            int Search(int newAlpha, int R = 1, bool canNull = true) => eval = -PVS(depth - R, -newAlpha, -alpha, plyFromRoot, canNull);
+            //
+            //
+
             // Transposition table lookup -> Found a valid entry for this position
-            TTEntry entry = transpositionTable[board.ZobristKey & 0x3FFFFF];
-            if (entry.Hash == board.ZobristKey && notRoot &&
-                entry.Depth >= depth)
-            {
-                // Cache this value to save tokens by not referencing using the . operator
-                int score = entry.Score;
-
-                // Exact
-                if (entry.Flag == 1)
-                    return score;
-
-                // Lowerbound
-                if (entry.Flag == 3)
-                    alpha = Max(alpha, score);
-                // Upperbound
-                else
-                    beta = Min(beta, score);
-
-                if (alpha >= beta)
-                    return score;
-            }
+            if (entry.Hash == zobristKey && notRoot && entry.Depth >= depth && (
+                    // Exact
+                    entryFlag == 1 ||
+                    // Upperbound
+                    entryFlag == 2 && entryScore <= alpha ||
+                    // Lowerbound
+                    entryFlag == 3 && entryScore >= beta))
+                return entryScore;
 
             // Check extensions
             if (inCheck)
@@ -117,7 +116,6 @@ namespace ChessChallenge.Example
             }
             // No pruning in QSearch
             // If this node is NOT part of the PV and we're not in check
-            // AND we haven't found a mate from either side
             else if (!isPV && !inCheck)
             {
                 // Reverse futility pruning
@@ -126,14 +124,14 @@ namespace ChessChallenge.Example
                 // Give ourselves a margin of 100 centipawns times depth.
                 // If we're up by more than that margin in material, there's no point in
                 // searching any further since our position is so good
-                if (depth <= 8 && staticEval - 100 * depth >= beta)
-                    return staticEval - 100 * depth;
+                if (depth <= 10 && staticEval - 96 * depth >= beta)
+                    return staticEval - 96 * depth;
 
                 // NULL move pruning
-                if (allowNull)
+                if (allowNull && depth >= 2)
                 {
                     board.TrySkipTurn();
-                    eval = -PVS(depth - 3 - depth / 5, -beta, 1 - beta, plyFromRoot, false);
+                    Search(beta, 3 + depth / 5, false);
                     board.UndoSkipTurn();
 
                     // Failed high on the null move
@@ -143,7 +141,7 @@ namespace ChessChallenge.Example
 
                 // Extended futility pruning
                 // Can only prune when at lower depth and behind in evaluation by a large margin
-                canPrune = depth <= 8 && staticEval + depth * 120 <= alpha;
+                canPrune = depth <= 8 && staticEval + depth * 141 <= alpha;
 
                 // Razoring (reduce depth if up a significant margin at depth 3)
                 /*
@@ -157,6 +155,8 @@ namespace ChessChallenge.Example
             var moves = board.GetLegalMoves(inQSearch && !inCheck).OrderByDescending(move =>
                 // Hash move
                 move == entry.BestMove ? 100000 :
+                // TODO: Test promotions
+                // move.IsPromotion ? 10000 :
                 // MVVLVA
                 move.IsCapture ? 1000 * (int)move.CapturePieceType - (int)move.MovePieceType :
                 // History
@@ -186,25 +186,22 @@ namespace ChessChallenge.Example
                 ////                                              ////
                 //////////////////////////////////////////////////////
 
-                // Evil local method to save tokens for similar calls to PVS
-                int Search(int newAlpha, int R = 1) => -PVS(depth - R, -newAlpha, -alpha, plyFromRoot, allowNull);
-
                 // LMR + PVS
                 if (movesTried++ == 0 || inQSearch)
                     // Always search first node with full depth
-                    eval = Search(beta);
+                    Search(beta);
 
                 // Set eval to appropriate alpha to be read from later
                 // -> if reduction is applicable do a reduced search with a null window,
                 // othewise automatically set alpha be above the threshold
-                else if ((eval = isPV || tactical || movesTried < 8 || depth < 3 || inCheck || board.IsInCheck()
-                        ? alpha + 1
+                else if ((isPV || tactical || movesTried < 6 || depth < 3 || inCheck || board.IsInCheck()
+                        ? eval = alpha + 1
                         : Search(alpha + 1, 3)) > alpha &&
 
                         // If alpha was above threshold, update eval with a search with a null window
-                        alpha < (eval = Search(alpha + 1)))
+                        alpha < Search(alpha + 1))
                     // We raised alpha on the null window search, research with no null window
-                    eval = Search(beta);
+                    Search(beta);
 
                 //////////////////////////////////////////////
                 ////                                      ////
@@ -243,8 +240,8 @@ namespace ChessChallenge.Example
             }
 
             // Transposition table insertion
-            transpositionTable[board.ZobristKey & 0x3FFFFF] = new TTEntry(
-                board.ZobristKey,
+            transpositionTable[zobristKey & 0x3FFFFF] = new(
+                zobristKey,
                 bestMove,
                 bestEval,
                 depth,
@@ -283,20 +280,17 @@ namespace ChessChallenge.Example
             UnpackedPestoTables = PackedPestoTables.Select(packedTable =>
             {
                 int pieceType = 0;
-                return decimal.GetBits(packedTable).Take(3)
-                    .SelectMany(bit => BitConverter.GetBytes(bit)
-                        .Select(square => (int)((sbyte)square * 1.461) + PieceValues[pieceType++]))
+                return new System.Numerics.BigInteger(packedTable).ToByteArray().Take(12)
+                        .Select(square => (int)((sbyte)square * 1.461) + PieceValues[pieceType++])
                     .ToArray();
-
             }).ToArray();
         }
 
         private int Evaluate()
         {
-            int middlegame = 0, endgame = 0, gamephase = 0, sideToMove = 2;
-            for (; --sideToMove >= 0;)
-            {
-                for (int piece = -1, square; ++piece < 6;)
+            int middlegame = 0, endgame = 0, gamephase = 0, sideToMove = 2, piece, square;
+            for (; --sideToMove >= 0; middlegame = -middlegame, endgame = -endgame)
+                for (piece = -1; ++piece < 6;)
                     for (ulong mask = board.GetPieceBitboard((PieceType)piece + 1, sideToMove > 0); mask != 0;)
                     {
                         // Gamephase, middlegame -> endgame
@@ -314,10 +308,6 @@ namespace ChessChallenge.Example
                             endgame += 30;
                         }
                     }
-
-                middlegame = -middlegame;
-                endgame = -endgame;
-            }
             // Tempo bonus to help with aspiration windows
             return (middlegame * gamephase + endgame * (24 - gamephase)) / 24 * (board.IsWhiteToMove ? 1 : -1) + gamephase / 2;
         }
