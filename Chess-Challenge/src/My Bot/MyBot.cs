@@ -119,7 +119,6 @@ public class MyBot : IChessBot
         }
         // No pruning in QSearch
         // If this node is NOT part of the PV and we're not in check
-        // AND we haven't found a mate from either side
         else if (!isPV && !inCheck)
         {
             // Reverse futility pruning
@@ -156,7 +155,7 @@ public class MyBot : IChessBot
 
         // Generate appropriate moves depending on whether we're in QSearch
         // Using var to save a single token
-        var moves = board.GetLegalMoves(inQSearch && !inCheck).OrderByDescending(move =>
+        var moves = board.GetLegalMoves(inQSearch && !inCheck).OrderByDescending(move => 
             // Hash move
             move == entry.BestMove ? 100000 :
             // MVVLVA

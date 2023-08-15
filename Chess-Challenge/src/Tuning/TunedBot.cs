@@ -119,7 +119,7 @@ namespace Chess_Challenge.src.Tuning
             }
             // No pruning in QSearch
             // If this node is NOT part of the PV and we're not in check
-            else if (!isPV && !inCheck && alpha > -50000)
+            else if (!isPV && !inCheck)
             {
                 // Reverse futility pruning
                 int staticEval = Evaluate();
