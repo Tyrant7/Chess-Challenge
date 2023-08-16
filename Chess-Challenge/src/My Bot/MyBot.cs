@@ -3,7 +3,6 @@
 using ChessChallenge.API;
 using System;
 using System.Linq;
-using static System.Math;
 
 // TODO: Fully test promotion ordering
 // TODO: Test ply check returning static eval below instead of 0
@@ -134,7 +133,7 @@ public class MyBot : IChessBot
             // Determine if quiescence search should be continued
             bestEval = Evaluate();
 
-            alpha = Max(alpha, bestEval);
+            alpha = Math.Max(alpha, bestEval);
             if (alpha >= beta)
                 return bestEval;
         }
@@ -145,7 +144,7 @@ public class MyBot : IChessBot
             // Reverse futility pruning
             int staticEval = Evaluate();
 
-            // Give ourselves a margin of 100 centipawns times depth.
+            // Give ourselves a margin of 96 centipawns times depth.
             // If we're up by more than that margin in material, there's no point in
             // searching any further since our position is so good
             if (depth <= 10 && staticEval - 96 * depth >= beta)
@@ -251,10 +250,7 @@ public class MyBot : IChessBot
                 if (!notRoot)
                     rootMove = move;
 
-                alpha = Max(eval, alpha);
-
-                if (alpha < beta)
-                    continue;
+                alpha = Math.Max(eval, alpha);
 
                 // Cutoff
                 if (alpha >= beta)
