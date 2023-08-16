@@ -1,10 +1,12 @@
-﻿using ChessChallenge.API;
+﻿// #define DEBUG
+
+using ChessChallenge.API;
 using System;
 using System.Linq;
 using static System.Math;
 
-// TODO: Test razoring
 // TODO: Fully test promotion ordering
+// TODO: Test ply check returning static eval below instead of 0
 
 public class MyBot : IChessBot
 {
@@ -17,8 +19,17 @@ public class MyBot : IChessBot
     Board board;
     Move rootMove;
 
+#if DEBUG
+    long nodes;
+#endif
+
     public Move Think(Board newBoard, Timer timer)
     {
+#if DEBUG
+        Console.WriteLine();
+        nodes = 0;
+#endif
+
         // Cache the board to save precious tokens
         board = newBoard;
 
@@ -46,8 +57,16 @@ public class MyBot : IChessBot
                 beta += 62;
             else
             {
-                Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " + // #DEBUG
-                    eval + " centipawns"); // #DEBUG
+#if DEBUG
+                Console.WriteLine("Info: depth: {0, 2} || eval: {1, 6} || nodes: {2, 9} || nps: {3, 8} || time: {4, 5}ms || best move: {5}{6}",
+                    depth,
+                    eval,
+                    nodes,
+                    1000 * nodes / (timer.MillisecondsElapsedThisTurn + 1),
+                    timer.MillisecondsElapsedThisTurn,
+                    rootMove.StartSquare.Name,
+                    rootMove.TargetSquare.Name);
+#endif
 
                 // Set up window for next search
                 alpha = eval - 17;
@@ -62,6 +81,10 @@ public class MyBot : IChessBot
     // This method doubles as our PVS and QSearch in order to save tokens
     private int PVS(int depth, int alpha, int beta, int plyFromRoot, bool allowNull)
     {
+#if DEBUG
+        nodes++;
+#endif
+
         // Declare some reused variables
         bool inCheck = board.IsInCheck(),
             isPV = beta - alpha > 1,
@@ -69,7 +92,6 @@ public class MyBot : IChessBot
             notRoot = plyFromRoot++ > 0;
 
         // Ply check is for long forced endgame draw sequences where search can get stuck forever
-        // TODO: test ply check returning static eval below instead of 0
         if (notRoot && board.IsRepeatedPosition() || plyFromRoot > 50)
             return 0;
 
@@ -170,19 +192,6 @@ public class MyBot : IChessBot
             historyHeuristics[currentTurn, (int)move.MovePieceType, move.TargetSquare.Index];
 
         moveScores.AsSpan(0, moveSpan.Length).Sort(moveSpan);
-
-        /*
-        var moves = board.GetLegalMoves(inQSearch && !inCheck).OrderByDescending(move => 
-            // Hash move
-            move == entry.BestMove ? 100000 :
-            // Promotions
-            // move.IsPromotion ? 10000 :
-            // MVVLVA
-            move.IsCapture ? 1000 * (int)move.CapturePieceType - (int)move.MovePieceType :
-            // History
-            historyHeuristics[currentTurn, (int)move.MovePieceType, move.TargetSquare.Index]
-        ).ToArray();
-        */
 
         // Gamestate, checkmate and draws
         if (!inQSearch && moveSpan.Length == 0)

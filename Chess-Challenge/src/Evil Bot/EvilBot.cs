@@ -11,12 +11,22 @@ namespace ChessChallenge.Example
         private Timer searchTimer;
 
         private int[,,] historyHeuristics;
+        private int[] moveScores = new int[218];
 
         Board board;
         Move rootMove;
 
+#if DEBUG
+    long nodes;
+#endif
+
         public Move Think(Board newBoard, Timer timer)
         {
+#if DEBUG
+        Console.WriteLine();
+        nodes = 0;
+#endif
+
             // Cache the board to save precious tokens
             board = newBoard;
 
@@ -44,8 +54,16 @@ namespace ChessChallenge.Example
                     beta += 62;
                 else
                 {
-                    Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " + // #DEBUG
-                        eval + " centipawns"); // #DEBUG
+#if DEBUG
+                Console.WriteLine("Info: depth: {0, 2} || eval: {1, 6} || nodes: {2, 9} || nps: {3, 8} || time: {4, 5}ms || best move: {5}{6}",
+                    depth,
+                    eval,
+                    nodes,
+                    1000 * nodes / (timer.MillisecondsElapsedThisTurn + 1),
+                    timer.MillisecondsElapsedThisTurn,
+                    rootMove.StartSquare.Name,
+                    rootMove.TargetSquare.Name);
+#endif
 
                     // Set up window for next search
                     alpha = eval - 17;
@@ -60,6 +78,10 @@ namespace ChessChallenge.Example
         // This method doubles as our PVS and QSearch in order to save tokens
         private int PVS(int depth, int alpha, int beta, int plyFromRoot, bool allowNull)
         {
+#if DEBUG
+        nodes++;
+#endif
+
             // Declare some reused variables
             bool inCheck = board.IsInCheck(),
                 isPV = beta - alpha > 1,
@@ -81,6 +103,7 @@ namespace ChessChallenge.Example
                 currentTurn = board.IsWhiteToMove ? 1 : 0,
                 entryScore = entry.Score,
                 entryFlag = entry.Flag,
+                n = 0,
                 eval;
 
             //
@@ -151,24 +174,29 @@ namespace ChessChallenge.Example
             }
 
             // Generate appropriate moves depending on whether we're in QSearch
-            // Using var to save a single token
-            var moves = board.GetLegalMoves(inQSearch && !inCheck).OrderByDescending(move =>
+            Span<Move> moveSpan = stackalloc Move[218];
+            board.GetLegalMovesNonAlloc(ref moveSpan, inQSearch && !inCheck);
+
+            // Order moves in reverse order -> negative values are ordered higher hence the strange equations
+            foreach (Move move in moveSpan)
+                moveScores[n++] =
                 // Hash move
-                move == entry.BestMove ? 100000 :
-                // TODO: Test promotions
+                move == entry.BestMove ? -100000 :
+                // Promotions
                 // move.IsPromotion ? 10000 :
                 // MVVLVA
-                move.IsCapture ? 1000 * (int)move.CapturePieceType - (int)move.MovePieceType :
+                move.IsCapture ? (int)move.MovePieceType - 1000 * (int)move.CapturePieceType :
                 // History
-                historyHeuristics[currentTurn, (int)move.MovePieceType, move.TargetSquare.Index]
-            ).ToArray();
+                historyHeuristics[currentTurn, (int)move.MovePieceType, move.TargetSquare.Index];
+
+            moveScores.AsSpan(0, moveSpan.Length).Sort(moveSpan);
 
             // Gamestate, checkmate and draws
-            if (!inQSearch && moves.Length == 0)
+            if (!inQSearch && moveSpan.Length == 0)
                 return inCheck ? plyFromRoot - 99999 : 0;
 
             Move bestMove = default;
-            foreach (Move move in moves)
+            foreach (Move move in moveSpan)
             {
                 bool tactical = movesTried == 0 || move.IsCapture || move.IsPromotion;
                 if (canPrune && !tactical)
@@ -229,7 +257,7 @@ namespace ChessChallenge.Example
                     {
                         // Update history tables
                         if (!move.IsCapture)
-                            historyHeuristics[currentTurn, (int)move.MovePieceType, move.TargetSquare.Index] += depth * depth;
+                            historyHeuristics[currentTurn, (int)move.MovePieceType, move.TargetSquare.Index] -= depth * depth;
                         break;
                     }
                 }
