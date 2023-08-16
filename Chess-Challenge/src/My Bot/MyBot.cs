@@ -1,9 +1,10 @@
-﻿#define DEBUG
+﻿//#define DEBUG
 
 using ChessChallenge.API;
 using System;
 using System.Linq;
 
+// TODO: More token saves
 // TODO: Fully test promotion ordering
 // TODO: Test ply check returning static eval below instead of 0
 

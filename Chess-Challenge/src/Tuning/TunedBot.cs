@@ -1,7 +1,6 @@
 ﻿using ChessChallenge.API;
 using System;
 using System.Linq;
-using static System.Math;
 
 namespace Chess_Challenge.src.Tuning
 {
@@ -13,12 +12,22 @@ namespace Chess_Challenge.src.Tuning
         private Timer searchTimer;
 
         private int[,,] historyHeuristics;
+        private int[] moveScores = new int[218];
 
         Board board;
         Move rootMove;
 
+#if DEBUG
+        long nodes;
+#endif
+
         public Move Think(Board newBoard, Timer timer)
         {
+#if DEBUG
+            Console.WriteLine();
+            nodes = 0;
+#endif
+
             // Cache the board to save precious tokens
             board = newBoard;
 
@@ -46,8 +55,16 @@ namespace Chess_Challenge.src.Tuning
                     beta += p.Parameters["AWWiden"];
                 else
                 {
-                    Console.WriteLine("hit depth: " + depth + " in " + searchTimer.MillisecondsElapsedThisTurn + "ms with an eval of " + // #DEBUG
-                        eval + " centipawns"); // #DEBUG
+#if DEBUG
+                    Console.WriteLine("Info: depth: {0, 2} || eval: {1, 6} || nodes: {2, 9} || nps: {3, 8} || time: {4, 5}ms || best move: {5}{6}",
+                        depth,
+                        eval,
+                        nodes,
+                        1000 * nodes / (timer.MillisecondsElapsedThisTurn + 1),
+                        timer.MillisecondsElapsedThisTurn,
+                        rootMove.StartSquare.Name,
+                        rootMove.TargetSquare.Name);
+#endif
 
                     // Set up window for next search
                     alpha = eval - p.Parameters["AWSize"];
@@ -62,6 +79,10 @@ namespace Chess_Challenge.src.Tuning
         // This method doubles as our PVS and QSearch in order to save tokens
         private int PVS(int depth, int alpha, int beta, int plyFromRoot, bool allowNull)
         {
+#if DEBUG
+            nodes++;
+#endif
+
             // Declare some reused variables
             bool inCheck = board.IsInCheck(),
                 isPV = beta - alpha > 1,
@@ -72,35 +93,33 @@ namespace Chess_Challenge.src.Tuning
             if (notRoot && board.IsRepeatedPosition() || plyFromRoot > 50)
                 return 0;
 
+            ulong zobristKey = board.ZobristKey;
+            ref TTEntry entry = ref transpositionTable[zobristKey & 0x3FFFFF];
+
             // Define best eval all the way up here to generate the standing pattern for QSearch
             int bestEval = -9999999,
                 originalAlpha = alpha,
                 movesTried = 0,
-                currentTurn = board.IsWhiteToMove ? 1 : 0,
+                entryScore = entry.Score,
+                entryFlag = entry.Flag,
+                n = 0,
                 eval;
 
+            //
+            // Evil local method to save tokens for similar calls to PVS (set eval inside search)
+            int Search(int newAlpha, int R = 1, bool canNull = true) => eval = -PVS(depth - R, -newAlpha, -alpha, plyFromRoot, canNull);
+            //
+            //
+
             // Transposition table lookup -> Found a valid entry for this position
-            TTEntry entry = transpositionTable[board.ZobristKey & 0x3FFFFF];
-            if (entry.Hash == board.ZobristKey && notRoot &&
-                entry.Depth >= depth)
-            {
-                // Cache this value to save tokens by not referencing using the . operator
-                int score = entry.Score;
-
-                // Exact
-                if (entry.Flag == 1)
-                    return score;
-
-                // Lowerbound
-                if (entry.Flag == 3)
-                    alpha = Max(alpha, score);
-                // Upperbound
-                else
-                    beta = Min(beta, score);
-
-                if (alpha >= beta)
-                    return score;
-            }
+            if (entry.Hash == zobristKey && notRoot && entry.Depth >= depth && (
+                    // Exact
+                    entryFlag == 1 ||
+                    // Upperbound
+                    entryFlag == 2 && entryScore <= alpha ||
+                    // Lowerbound
+                    entryFlag == 3 && entryScore >= beta))
+                return entryScore;
 
             // Check extensions
             if (inCheck)
@@ -113,7 +132,7 @@ namespace Chess_Challenge.src.Tuning
                 // Determine if quiescence search should be continued
                 bestEval = Evaluate();
 
-                alpha = Max(alpha, bestEval);
+                alpha = Math.Max(alpha, bestEval);
                 if (alpha >= beta)
                     return bestEval;
             }
@@ -124,17 +143,17 @@ namespace Chess_Challenge.src.Tuning
                 // Reverse futility pruning
                 int staticEval = Evaluate();
 
-                // Give ourselves a margin of 85 centipawns times depth.
-                // If we're up by more than that margin, there's no point in
+                // Give ourselves a margin of 96 centipawns times depth.
+                // If we're up by more than that margin in material, there's no point in
                 // searching any further since our position is so good
                 if (depth <= p.Parameters["RFPDepthMargin"] && staticEval - p.Parameters["RFPMargin"] * depth >= beta)
-                    return staticEval - p.Parameters["RFPMargin"] * depth;
+                    return staticEval;
 
                 // NULL move pruning
-                if (allowNull)
+                if (allowNull && depth >= 2)
                 {
                     board.TrySkipTurn();
-                    eval = -PVS(depth - p.Parameters["NMP_R"] - depth / p.Parameters["NMPDepthCoef"], -beta, 1 - beta, plyFromRoot, false);
+                    Search(beta, p.Parameters["NMP_R"] + depth / p.Parameters["NMPDepthCoef"], false);
                     board.UndoSkipTurn();
 
                     // Failed high on the null move
@@ -154,25 +173,29 @@ namespace Chess_Challenge.src.Tuning
             }
 
             // Generate appropriate moves depending on whether we're in QSearch
-            // Using var to save a single token
-            var moves = board.GetLegalMoves(inQSearch && !inCheck).OrderByDescending(move =>
-            {
+            Span<Move> moveSpan = stackalloc Move[218];
+            board.GetLegalMovesNonAlloc(ref moveSpan, inQSearch && !inCheck);
+
+            // Order moves in reverse order -> negative values are ordered higher hence the strange equations
+            foreach (Move move in moveSpan)
+                moveScores[n++] =
                 // Hash move
-                return move == entry.BestMove ? 100000 :
-
+                move == entry.BestMove ? -100000 :
+                // Promotions
+                // move.IsPromotion ? 10000 :
                 // MVVLVA
-                move.IsCapture ? 1000 * (int)move.CapturePieceType - (int)move.MovePieceType :
-
+                move.IsCapture ? (int)move.MovePieceType - 1000 * (int)move.CapturePieceType :
                 // History
-                historyHeuristics[currentTurn, (int)move.MovePieceType, move.TargetSquare.Index];
-            }).ToArray();
+                historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index];
+
+            moveScores.AsSpan(0, moveSpan.Length).Sort(moveSpan);
 
             // Gamestate, checkmate and draws
-            if (!inQSearch && moves.Length == 0)
+            if (!inQSearch && moveSpan.Length == 0)
                 return inCheck ? plyFromRoot - 99999 : 0;
 
             Move bestMove = default;
-            foreach (Move move in moves)
+            foreach (Move move in moveSpan)
             {
                 bool tactical = movesTried == 0 || move.IsCapture || move.IsPromotion;
                 if (canPrune && !tactical)
@@ -190,25 +213,22 @@ namespace Chess_Challenge.src.Tuning
                 ////                                              ////
                 //////////////////////////////////////////////////////
 
-                // Evil local method to save tokens for similar calls to PVS
-                int Search(int newAlpha, int R = 1) => -PVS(depth - R, -newAlpha, -alpha, plyFromRoot, allowNull);
-
                 // LMR + PVS
                 if (movesTried++ == 0 || inQSearch)
                     // Always search first node with full depth
-                    eval = Search(beta);
+                    Search(beta);
 
                 // Set eval to appropriate alpha to be read from later
                 // -> if reduction is applicable do a reduced search with a null window,
                 // othewise automatically set alpha be above the threshold
-                else if ((eval = isPV || tactical || movesTried < p.Parameters["LMRTriedMargin"] || depth < p.Parameters["LMRDepthMargin"] || inCheck || board.IsInCheck()
-                        ? alpha + 1
+                else if ((isPV || tactical || movesTried < p.Parameters["LMRTriedMargin"] || depth < p.Parameters["LMRDepthMargin"] || inCheck || board.IsInCheck()
+                        ? eval = alpha + 1
                         : Search(alpha + 1, p.Parameters["LMR_R"])) > alpha &&
 
                         // If alpha was above threshold, update eval with a search with a null window
-                        alpha < (eval = Search(alpha + 1)))
+                        alpha < Search(alpha + 1))
                     // We raised alpha on the null window search, research with no null window
-                    eval = Search(beta);
+                    Search(beta);
 
                 //////////////////////////////////////////////
                 ////                                      ////
@@ -229,14 +249,14 @@ namespace Chess_Challenge.src.Tuning
                     if (!notRoot)
                         rootMove = move;
 
-                    alpha = Max(eval, alpha);
+                    alpha = Math.Max(eval, alpha);
 
                     // Cutoff
                     if (alpha >= beta)
                     {
                         // Update history tables
                         if (!move.IsCapture)
-                            historyHeuristics[currentTurn, (int)move.MovePieceType, move.TargetSquare.Index] += depth * depth;
+                            historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index] -= depth * depth;
                         break;
                     }
                 }
@@ -247,8 +267,8 @@ namespace Chess_Challenge.src.Tuning
             }
 
             // Transposition table insertion
-            transpositionTable[board.ZobristKey & 0x3FFFFF] = new TTEntry(
-                board.ZobristKey,
+            entry = new(
+                zobristKey,
                 bestMove,
                 bestEval,
                 depth,
@@ -282,26 +302,23 @@ namespace Chess_Challenge.src.Tuning
 
         private readonly int[][] UnpackedPestoTables;
 
-        public TunedBot(RawParameters searchParams)
+        public TunedBot(RawParameters parameters)
         {
-            p = searchParams;
+            p = parameters;
             UnpackedPestoTables = PackedPestoTables.Select(packedTable =>
             {
                 int pieceType = 0;
-                return decimal.GetBits(packedTable).Take(3)
-                    .SelectMany(bit => BitConverter.GetBytes(bit)
-                        .Select(square => (int)((sbyte)square * 1.461) + PieceValues[pieceType++]))
+                return new System.Numerics.BigInteger(packedTable).ToByteArray().Take(12)
+                        .Select(square => (int)((sbyte)square * 1.461) + PieceValues[pieceType++])
                     .ToArray();
-
             }).ToArray();
         }
 
         private int Evaluate()
         {
-            int middlegame = 0, endgame = 0, gamephase = 0, sideToMove = 2;
-            for (; --sideToMove >= 0;)
-            {
-                for (int piece = -1, square; ++piece < 6;)
+            int middlegame = 0, endgame = 0, gamephase = 0, sideToMove = 2, piece, square;
+            for (; --sideToMove >= 0; middlegame = -middlegame, endgame = -endgame)
+                for (piece = -1; ++piece < 6;)
                     for (ulong mask = board.GetPieceBitboard((PieceType)piece + 1, sideToMove > 0); mask != 0;)
                     {
                         // Gamephase, middlegame -> endgame
@@ -319,10 +336,6 @@ namespace Chess_Challenge.src.Tuning
                             endgame += 30;
                         }
                     }
-
-                middlegame = -middlegame;
-                endgame = -endgame;
-            }
             // Tempo bonus to help with aspiration windows
             return (middlegame * gamephase + endgame * (24 - gamephase)) / 24 * (board.IsWhiteToMove ? 1 : -1) + gamephase / 2;
         }
