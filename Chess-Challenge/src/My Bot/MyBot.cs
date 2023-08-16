@@ -1,4 +1,4 @@
-﻿// #define DEBUG
+﻿#define DEBUG
 
 using ChessChallenge.API;
 using System;
@@ -96,13 +96,12 @@ public class MyBot : IChessBot
             return 0;
 
         ulong zobristKey = board.ZobristKey;
-        TTEntry entry = transpositionTable[zobristKey & 0x3FFFFF];
+        ref TTEntry entry = ref transpositionTable[zobristKey & 0x3FFFFF];
 
         // Define best eval all the way up here to generate the standing pattern for QSearch
         int bestEval = -9999999,
             originalAlpha = alpha,
             movesTried = 0,
-            currentTurn = board.IsWhiteToMove ? 1 : 0,
             entryScore = entry.Score,
             entryFlag = entry.Flag,
             n = 0,
@@ -189,7 +188,7 @@ public class MyBot : IChessBot
             // MVVLVA
             move.IsCapture ? (int)move.MovePieceType - 1000 * (int)move.CapturePieceType :
             // History
-            historyHeuristics[currentTurn, (int)move.MovePieceType, move.TargetSquare.Index];
+            historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index];
 
         moveScores.AsSpan(0, moveSpan.Length).Sort(moveSpan);
 
@@ -254,12 +253,15 @@ public class MyBot : IChessBot
 
                 alpha = Max(eval, alpha);
 
+                if (alpha < beta)
+                    continue;
+
                 // Cutoff
                 if (alpha >= beta)
                 {
                     // Update history tables
                     if (!move.IsCapture)
-                        historyHeuristics[currentTurn, (int)move.MovePieceType, move.TargetSquare.Index] -= depth * depth;
+                        historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index] -= depth * depth;
                     break;
                 }
             }
@@ -270,7 +272,7 @@ public class MyBot : IChessBot
         }
 
         // Transposition table insertion
-        transpositionTable[zobristKey & 0x3FFFFF] = new(
+        entry = new(
             zobristKey,
             bestMove,
             bestEval,
