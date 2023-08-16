@@ -4,8 +4,7 @@ using System.Linq;
 using static System.Math;
 
 // TODO: Test razoring
-// TODO: Fix broken checkmates/blundering in the endgame
-// TODO: Test depth limited RFP and only returning eval without margin added
+// TODO: Fully test promotion ordering
 
 public class MyBot : IChessBot
 {
@@ -13,6 +12,7 @@ public class MyBot : IChessBot
     private Timer searchTimer;
 
     private int[,,] historyHeuristics;
+    private int[] moveScores = new int[218];
 
     Board board;
     Move rootMove;
@@ -83,6 +83,7 @@ public class MyBot : IChessBot
             currentTurn = board.IsWhiteToMove ? 1 : 0,
             entryScore = entry.Score,
             entryFlag = entry.Flag,
+            n = 0,
             eval;
 
         //
@@ -127,7 +128,7 @@ public class MyBot : IChessBot
             // If we're up by more than that margin in material, there's no point in
             // searching any further since our position is so good
             if (depth <= 10 && staticEval - 96 * depth >= beta)
-                return staticEval - 96 * depth;
+                return staticEval;
 
             // NULL move pruning
             if (allowNull && depth >= 2)
@@ -153,35 +154,46 @@ public class MyBot : IChessBot
         }
 
         // Generate appropriate moves depending on whether we're in QSearch
-        // Using var to save a single token
+        Span<Move> moveSpan = stackalloc Move[218];
+        board.GetLegalMovesNonAlloc(ref moveSpan, inQSearch && !inCheck);
+
+        // Order moves in reverse order -> negative values are ordered higher hence the strange equations
+        foreach (Move move in moveSpan)
+            moveScores[n++] = 
+            // Hash move
+            move == entry.BestMove ? -100000 :
+            // Promotions
+            // move.IsPromotion ? 10000 :
+            // MVVLVA
+            move.IsCapture ? (int)move.MovePieceType - 1000 * (int)move.CapturePieceType :
+            // History
+            historyHeuristics[currentTurn, (int)move.MovePieceType, move.TargetSquare.Index];
+
+        moveScores.AsSpan(0, moveSpan.Length).Sort(moveSpan);
+
+        /*
         var moves = board.GetLegalMoves(inQSearch && !inCheck).OrderByDescending(move => 
             // Hash move
             move == entry.BestMove ? 100000 :
             // Promotions
-            move.IsPromotion ? 10000 :
+            // move.IsPromotion ? 10000 :
             // MVVLVA
             move.IsCapture ? 1000 * (int)move.CapturePieceType - (int)move.MovePieceType :
             // History
             historyHeuristics[currentTurn, (int)move.MovePieceType, move.TargetSquare.Index]
         ).ToArray();
+        */
 
         // Gamestate, checkmate and draws
-        if (!inQSearch && moves.Length == 0)
+        if (!inQSearch && moveSpan.Length == 0)
             return inCheck ? plyFromRoot - 99999 : 0;
 
         Move bestMove = default;
-        foreach (Move move in moves)
+        foreach (Move move in moveSpan)
         {
             bool tactical = movesTried == 0 || move.IsCapture || move.IsPromotion;
             if (canPrune && !tactical)
                 continue;
-
-            // Promotion extensions
-            // TODO: Test
-            /*
-            if (move.IsPromotion)
-                depth++;
-            */
 
             board.MakeMove(move);
 
@@ -238,7 +250,7 @@ public class MyBot : IChessBot
                 {
                     // Update history tables
                     if (!move.IsCapture)
-                        historyHeuristics[currentTurn, (int)move.MovePieceType, move.TargetSquare.Index] += depth * depth;
+                        historyHeuristics[currentTurn, (int)move.MovePieceType, move.TargetSquare.Index] -= depth * depth;
                     break;
                 }
             }

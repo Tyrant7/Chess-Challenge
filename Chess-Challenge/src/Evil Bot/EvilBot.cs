@@ -125,7 +125,7 @@ namespace ChessChallenge.Example
                 // If we're up by more than that margin in material, there's no point in
                 // searching any further since our position is so good
                 if (depth <= 10 && staticEval - 96 * depth >= beta)
-                    return staticEval - 96 * depth;
+                    return staticEval;
 
                 // NULL move pruning
                 if (allowNull && depth >= 2)
