@@ -103,7 +103,7 @@ public class MyBot : IChessBot
             movesTried = 0,
             entryScore = entry.Score,
             entryFlag = entry.Flag,
-            n = 0,
+            movesScored = 0,
             eval;
 
         //
@@ -180,7 +180,7 @@ public class MyBot : IChessBot
         // Order moves in reverse order -> negative values are ordered higher hence the strange equations
         Span<int> moveScores = stackalloc int[moveSpan.Length];
         foreach (Move move in moveSpan)
-            moveScores[n++] = 
+            moveScores[movesScored++] = 
             // Hash move
             move == entry.BestMove ? -100000 :
             // Promotions
@@ -195,7 +195,7 @@ public class MyBot : IChessBot
         moveScores.Sort(moveSpan);
 
         // Gamestate, checkmate and draws
-        if (!inQSearch && moveSpan.Length == 0)
+        if (!inQSearch && moveSpan.IsEmpty)
             return inCheck ? plyFromRoot - 99999 : 0;
 
         Move bestMove = default;
@@ -334,13 +334,6 @@ public class MyBot : IChessBot
                     square = BitboardHelper.ClearAndGetIndexOfLSB(ref mask) ^ 56 * sideToMove;
                     middlegame += UnpackedPestoTables[square][piece];
                     endgame += UnpackedPestoTables[square][piece + 6];
-
-                    // Bishop pair bonus
-                    if (piece == 2 && mask != 0)
-                    {
-                        middlegame += 22;
-                        endgame += 30;
-                    }
                 }
                                                                                                         // Tempo bonus to help with aspiration windows
         return (middlegame * gamephase + endgame * (24 - gamephase)) / 24 * (board.IsWhiteToMove ? 1 : -1) + gamephase / 2;

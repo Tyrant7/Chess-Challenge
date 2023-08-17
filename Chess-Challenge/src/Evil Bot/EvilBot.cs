@@ -332,13 +332,6 @@ namespace ChessChallenge.Example
                         square = BitboardHelper.ClearAndGetIndexOfLSB(ref mask) ^ 56 * sideToMove;
                         middlegame += UnpackedPestoTables[square][piece];
                         endgame += UnpackedPestoTables[square][piece + 6];
-
-                        // Bishop pair bonus
-                        if (piece == 2 && mask != 0)
-                        {
-                            middlegame += 22;
-                            endgame += 30;
-                        }
                     }
             // Tempo bonus to help with aspiration windows
             return (middlegame * gamephase + endgame * (24 - gamephase)) / 24 * (board.IsWhiteToMove ? 1 : -1) + gamephase / 2;
