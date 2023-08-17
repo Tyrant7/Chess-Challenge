@@ -350,9 +350,9 @@ public class MyBot : IChessBot
     // enum Flag
     // {
     //     0 = Invalid,
-    //     1 = Exact
-    //     2 = Upperbound
-    //     3 = Lowerbound,
+    //     1 = Exact,
+    //     2 = Upperbound,
+    //     3 = Lowerbound
     // }
     private record struct TTEntry(ulong Hash, Move BestMove, int Score, int Depth, int Flag);
 
