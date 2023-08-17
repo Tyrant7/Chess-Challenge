@@ -12,7 +12,6 @@ namespace Chess_Challenge.src.Tuning
         private Timer searchTimer;
 
         private int[,,] historyHeuristics;
-        private int[] moveScores = new int[218];
 
         Board board;
         Move rootMove;
@@ -177,6 +176,7 @@ namespace Chess_Challenge.src.Tuning
             board.GetLegalMovesNonAlloc(ref moveSpan, inQSearch && !inCheck);
 
             // Order moves in reverse order -> negative values are ordered higher hence the strange equations
+            Span<int> moveScores = stackalloc int[moveSpan.Length];
             foreach (Move move in moveSpan)
                 moveScores[n++] =
                 // Hash move
@@ -188,7 +188,7 @@ namespace Chess_Challenge.src.Tuning
                 // History
                 historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index];
 
-            moveScores.AsSpan(0, moveSpan.Length).Sort(moveSpan);
+            moveScores.Sort(moveSpan);
 
             // Gamestate, checkmate and draws
             if (!inQSearch && moveSpan.Length == 0)

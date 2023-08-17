@@ -6,7 +6,6 @@ using System.Linq;
 
 // TODO: More token saves
 // TODO: Fully test promotion ordering
-// TODO: Test ply check returning static eval below instead of 0
 
 public class MyBot : IChessBot
 {
@@ -14,7 +13,7 @@ public class MyBot : IChessBot
     private Timer searchTimer;
 
     private int[,,] historyHeuristics;
-    private int[] moveScores = new int[218];
+    private Move[] killers = new Move[52];
 
     Board board;
     Move rootMove;
@@ -41,9 +40,9 @@ public class MyBot : IChessBot
         searchTimer = timer;
 
         // Progressively increase search depth, starting from 2
-        for (int depth = 2, alpha = -999999, beta = 999999; ;)
+        for (int depth = 2, alpha = -999999, beta = 999999, eval; ;)
         {
-            int eval = PVS(depth, alpha, beta, 0, true);
+            eval = PVS(depth, alpha, beta, 0, true);
 
             // Out of time
             if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime)
@@ -179,6 +178,7 @@ public class MyBot : IChessBot
         board.GetLegalMovesNonAlloc(ref moveSpan, inQSearch && !inCheck);
 
         // Order moves in reverse order -> negative values are ordered higher hence the strange equations
+        Span<int> moveScores = stackalloc int[moveSpan.Length];
         foreach (Move move in moveSpan)
             moveScores[n++] = 
             // Hash move
@@ -186,11 +186,13 @@ public class MyBot : IChessBot
             // Promotions
             // move.IsPromotion ? 10000 :
             // MVVLVA
-            move.IsCapture ? (int)move.MovePieceType - 1000 * (int)move.CapturePieceType :
+            move.IsCapture ? (int)move.MovePieceType - 10000 * (int)move.CapturePieceType :
+            // Killers
+            killers[plyFromRoot] == move ? -1000 :
             // History
             historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index];
 
-        moveScores.AsSpan(0, moveSpan.Length).Sort(moveSpan);
+        moveScores.Sort(moveSpan);
 
         // Gamestate, checkmate and draws
         if (!inQSearch && moveSpan.Length == 0)
@@ -258,7 +260,10 @@ public class MyBot : IChessBot
                 {
                     // Update history tables
                     if (!move.IsCapture)
+                    {
                         historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index] -= depth * depth;
+                        killers[plyFromRoot] = move;
+                    }
                     break;
                 }
             }

@@ -11,7 +11,7 @@ namespace ChessChallenge.Example
         private Timer searchTimer;
 
         private int[,,] historyHeuristics;
-        private int[] moveScores = new int[218];
+        private Move[] killers = new Move[52];
 
         Board board;
         Move rootMove;
@@ -38,9 +38,9 @@ namespace ChessChallenge.Example
             searchTimer = timer;
 
             // Progressively increase search depth, starting from 2
-            for (int depth = 2, alpha = -999999, beta = 999999; ;)
+            for (int depth = 2, alpha = -999999, beta = 999999, eval; ;)
             {
-                int eval = PVS(depth, alpha, beta, 0, true);
+                eval = PVS(depth, alpha, beta, 0, true);
 
                 // Out of time
                 if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime)
@@ -89,18 +89,16 @@ namespace ChessChallenge.Example
                 notRoot = plyFromRoot++ > 0;
 
             // Ply check is for long forced endgame draw sequences where search can get stuck forever
-            // TODO: test ply check returning static eval below instead of 0
             if (notRoot && board.IsRepeatedPosition() || plyFromRoot > 50)
                 return 0;
 
             ulong zobristKey = board.ZobristKey;
-            TTEntry entry = transpositionTable[zobristKey & 0x3FFFFF];
+            ref TTEntry entry = ref transpositionTable[zobristKey & 0x3FFFFF];
 
             // Define best eval all the way up here to generate the standing pattern for QSearch
             int bestEval = -9999999,
                 originalAlpha = alpha,
                 movesTried = 0,
-                currentTurn = board.IsWhiteToMove ? 1 : 0,
                 entryScore = entry.Score,
                 entryFlag = entry.Flag,
                 n = 0,
@@ -133,7 +131,7 @@ namespace ChessChallenge.Example
                 // Determine if quiescence search should be continued
                 bestEval = Evaluate();
 
-                alpha = Max(alpha, bestEval);
+                alpha = Math.Max(alpha, bestEval);
                 if (alpha >= beta)
                     return bestEval;
             }
@@ -144,7 +142,7 @@ namespace ChessChallenge.Example
                 // Reverse futility pruning
                 int staticEval = Evaluate();
 
-                // Give ourselves a margin of 100 centipawns times depth.
+                // Give ourselves a margin of 96 centipawns times depth.
                 // If we're up by more than that margin in material, there's no point in
                 // searching any further since our position is so good
                 if (depth <= 10 && staticEval - 96 * depth >= beta)
@@ -178,6 +176,7 @@ namespace ChessChallenge.Example
             board.GetLegalMovesNonAlloc(ref moveSpan, inQSearch && !inCheck);
 
             // Order moves in reverse order -> negative values are ordered higher hence the strange equations
+            Span<int> moveScores = stackalloc int[moveSpan.Length];
             foreach (Move move in moveSpan)
                 moveScores[n++] =
                 // Hash move
@@ -185,11 +184,13 @@ namespace ChessChallenge.Example
                 // Promotions
                 // move.IsPromotion ? 10000 :
                 // MVVLVA
-                move.IsCapture ? (int)move.MovePieceType - 1000 * (int)move.CapturePieceType :
+                move.IsCapture ? (int)move.MovePieceType - 10000 * (int)move.CapturePieceType :
+                // Killers
+                killers[plyFromRoot] == move ? -1000 :
                 // History
-                historyHeuristics[currentTurn, (int)move.MovePieceType, move.TargetSquare.Index];
+                historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index];
 
-            moveScores.AsSpan(0, moveSpan.Length).Sort(moveSpan);
+            moveScores.Sort(moveSpan);
 
             // Gamestate, checkmate and draws
             if (!inQSearch && moveSpan.Length == 0)
@@ -250,14 +251,17 @@ namespace ChessChallenge.Example
                     if (!notRoot)
                         rootMove = move;
 
-                    alpha = Max(eval, alpha);
+                    alpha = Math.Max(eval, alpha);
 
                     // Cutoff
                     if (alpha >= beta)
                     {
                         // Update history tables
                         if (!move.IsCapture)
-                            historyHeuristics[currentTurn, (int)move.MovePieceType, move.TargetSquare.Index] -= depth * depth;
+                        {
+                            historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index] -= depth * depth;
+                            killers[plyFromRoot] = move;
+                        }
                         break;
                     }
                 }
@@ -268,7 +272,7 @@ namespace ChessChallenge.Example
             }
 
             // Transposition table insertion
-            transpositionTable[zobristKey & 0x3FFFFF] = new(
+            entry = new(
                 zobristKey,
                 bestMove,
                 bestEval,
