@@ -231,9 +231,9 @@ public class MyBot : IChessBot
             // Set eval to appropriate alpha to be read from later
             // -> if reduction is applicable do a reduced search with a null window,
             // othewise automatically set alpha be above the threshold
-            else if ((tactical || movesTried < 6 || depth < 2 || inCheck
+            else if ((movesTried < 6 || depth < 2
                     ? eval = alpha + 1
-                    : Search(alpha + 1, 1 + movesTried / 7 + depth / 5)) > alpha &&
+                    : Search(alpha + 1, 3)) > alpha &&
 
                     // If alpha was above threshold, update eval with a search with a null window
                     alpha < Search(alpha + 1))
