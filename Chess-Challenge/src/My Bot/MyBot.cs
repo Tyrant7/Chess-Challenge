@@ -180,17 +180,17 @@ public class MyBot : IChessBot
         // Order moves in reverse order -> negative values are ordered higher hence the strange equations
         Span<int> moveScores = stackalloc int[moveSpan.Length];
         foreach (Move move in moveSpan)
-            moveScores[movesScored++] = 
+            moveScores[movesScored++] = -(
             // Hash move
-            move == entry.BestMove ? -100000 :
+            move == entry.BestMove ? 100000 :
             // Promotions
-            // move.IsPromotion ? 10000 :
+            // move.IsPromotion ? -10000 :
             // MVVLVA
-            move.IsCapture ? (int)move.MovePieceType - 10000 * (int)move.CapturePieceType :
+            move.IsCapture ? 10000 * (int)move.CapturePieceType - (int)move.MovePieceType :
             // Killers
-            killers[plyFromRoot] == move ? -1000 :
+            killers[plyFromRoot] == move ? 1000 :
             // History
-            historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index];
+            historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index]);
 
         moveScores.Sort(moveSpan);
 
@@ -261,7 +261,7 @@ public class MyBot : IChessBot
                     // Update history tables
                     if (!move.IsCapture)
                     {
-                        historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index] -= depth * depth;
+                        historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index] += depth * depth;
                         killers[plyFromRoot] = move;
                     }
                     break;
