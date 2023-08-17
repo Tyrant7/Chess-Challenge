@@ -57,9 +57,16 @@ public class MyBot : IChessBot
             else
             {
 #if DEBUG
+                string evalWithMate = eval.ToString();
+                if (Math.Abs(eval) > 50000)
+                {
+                    evalWithMate = eval < 0 ? "-" : "";
+                    evalWithMate += $"M{Math.Ceiling((99999 - (double)eval) / 2)}";
+                }
+
                 Console.WriteLine("Info: depth: {0, 2} || eval: {1, 6} || nodes: {2, 9} || nps: {3, 8} || time: {4, 5}ms || best move: {5}{6}",
                     depth,
-                    eval,
+                    evalWithMate,
                     nodes,
                     1000 * nodes / (timer.MillisecondsElapsedThisTurn + 1),
                     timer.MillisecondsElapsedThisTurn,
