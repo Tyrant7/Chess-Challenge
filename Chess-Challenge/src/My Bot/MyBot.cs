@@ -3,9 +3,11 @@
 using ChessChallenge.API;
 using System;
 using System.Linq;
+using static System.Math;
 
 // TODO: More token saves
 // TODO: Fully test promotion ordering
+// TODO: Test killers from 2 plies back in move ordering
 
 public class MyBot : IChessBot
 {
@@ -58,10 +60,10 @@ public class MyBot : IChessBot
             {
 #if DEBUG
                 string evalWithMate = eval.ToString();
-                if (Math.Abs(eval) > 50000)
+                if (Abs(eval) > 50000)
                 {
                     evalWithMate = eval < 0 ? "-" : "";
-                    evalWithMate += $"M{Math.Ceiling((99999 - (double)eval) / 2)}";
+                    evalWithMate += $"M{Ceiling((99999 - (double)eval) / 2)}";
                 }
 
                 Console.WriteLine("Info: depth: {0, 2} || eval: {1, 6} || nodes: {2, 9} || nps: {3, 8} || time: {4, 5}ms || best move: {5}{6}",
@@ -140,7 +142,7 @@ public class MyBot : IChessBot
             // Determine if quiescence search should be continued
             bestEval = Evaluate();
 
-            alpha = Math.Max(alpha, bestEval);
+            alpha = Max(alpha, bestEval);
             if (alpha >= beta)
                 return bestEval;
         }
@@ -232,7 +234,7 @@ public class MyBot : IChessBot
             // Set eval to appropriate alpha to be read from later
             // -> if reduction is applicable do a reduced search with a null window,
             // othewise automatically set alpha be above the threshold
-            else if ((isPV || tactical || movesTried < 6 || depth < 3 || inCheck || board.IsInCheck()
+            else if ((tactical || movesTried < 6 || depth < 3 || inCheck
                     ? eval = alpha + 1
                     : Search(alpha + 1, 3)) > alpha &&
 
@@ -260,7 +262,7 @@ public class MyBot : IChessBot
                 if (!notRoot)
                     rootMove = move;
 
-                alpha = Math.Max(eval, alpha);
+                alpha = Max(eval, alpha);
 
                 // Cutoff
                 if (alpha >= beta)

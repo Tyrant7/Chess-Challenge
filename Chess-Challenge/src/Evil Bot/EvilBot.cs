@@ -55,9 +55,16 @@ namespace ChessChallenge.Example
                 else
                 {
 #if DEBUG
+                string evalWithMate = eval.ToString();
+                if (Abs(eval) > 50000)
+                {
+                    evalWithMate = eval < 0 ? "-" : "";
+                    evalWithMate += $"M{Ceiling((99999 - (double)eval) / 2)}";
+                }
+
                 Console.WriteLine("Info: depth: {0, 2} || eval: {1, 6} || nodes: {2, 9} || nps: {3, 8} || time: {4, 5}ms || best move: {5}{6}",
                     depth,
-                    eval,
+                    evalWithMate,
                     nodes,
                     1000 * nodes / (timer.MillisecondsElapsedThisTurn + 1),
                     timer.MillisecondsElapsedThisTurn,
@@ -101,7 +108,7 @@ namespace ChessChallenge.Example
                 movesTried = 0,
                 entryScore = entry.Score,
                 entryFlag = entry.Flag,
-                n = 0,
+                movesScored = 0,
                 eval;
 
             //
@@ -131,7 +138,7 @@ namespace ChessChallenge.Example
                 // Determine if quiescence search should be continued
                 bestEval = Evaluate();
 
-                alpha = Math.Max(alpha, bestEval);
+                alpha = Max(alpha, bestEval);
                 if (alpha >= beta)
                     return bestEval;
             }
@@ -178,17 +185,17 @@ namespace ChessChallenge.Example
             // Order moves in reverse order -> negative values are ordered higher hence the strange equations
             Span<int> moveScores = stackalloc int[moveSpan.Length];
             foreach (Move move in moveSpan)
-                moveScores[n++] =
+                moveScores[movesScored++] = -(
                 // Hash move
-                move == entry.BestMove ? -100000 :
+                move == entry.BestMove ? 9_000_000 :
                 // Promotions
                 // move.IsPromotion ? 10000 :
                 // MVVLVA
-                move.IsCapture ? (int)move.MovePieceType - 10000 * (int)move.CapturePieceType :
+                move.IsCapture ? 1_000_000 * (int)move.CapturePieceType - (int)move.MovePieceType :
                 // Killers
-                killers[plyFromRoot] == move ? -1000 :
+                killers[plyFromRoot] == move ? 900_000 :
                 // History
-                historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index];
+                historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index]);
 
             moveScores.Sort(moveSpan);
 
@@ -251,7 +258,7 @@ namespace ChessChallenge.Example
                     if (!notRoot)
                         rootMove = move;
 
-                    alpha = Math.Max(eval, alpha);
+                    alpha = Max(eval, alpha);
 
                     // Cutoff
                     if (alpha >= beta)
@@ -259,7 +266,7 @@ namespace ChessChallenge.Example
                         // Update history tables
                         if (!move.IsCapture)
                         {
-                            historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index] -= depth * depth;
+                            historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index] += depth * depth;
                             killers[plyFromRoot] = move;
                         }
                         break;
@@ -348,9 +355,9 @@ namespace ChessChallenge.Example
         // enum Flag
         // {
         //     0 = Invalid,
-        //     1 = Exact
-        //     2 = Upperbound
-        //     3 = Lowerbound,
+        //     1 = Exact,
+        //     2 = Upperbound,
+        //     3 = Lowerbound
         // }
         private record struct TTEntry(ulong Hash, Move BestMove, int Score, int Depth, int Flag);
 
