@@ -137,10 +137,9 @@ namespace ChessChallenge.Example
             {
                 // Determine if quiescence search should be continued
                 bestEval = Evaluate();
-
-                alpha = Max(alpha, bestEval);
-                if (alpha >= beta)
+                if (bestEval >= beta)
                     return bestEval;
+                alpha = Math.Max(alpha, bestEval);
             }
             // No pruning in QSearch
             // If this node is NOT part of the PV and we're not in check
@@ -179,7 +178,7 @@ namespace ChessChallenge.Example
             }
 
             // Generate appropriate moves depending on whether we're in QSearch
-            Span<Move> moveSpan = stackalloc Move[218];
+            Span<Move> moveSpan = stackalloc Move[242];
             board.GetLegalMovesNonAlloc(ref moveSpan, inQSearch && !inCheck);
 
             // Order moves in reverse order -> negative values are ordered higher hence the strange equations
@@ -230,12 +229,12 @@ namespace ChessChallenge.Example
                 // Set eval to appropriate alpha to be read from later
                 // -> if reduction is applicable do a reduced search with a null window,
                 // othewise automatically set alpha be above the threshold
-                else if ((isPV || tactical || movesTried < 6 || depth < 3 || inCheck || board.IsInCheck()
+                else if ((tactical || movesTried < 6 || depth < 2 || inCheck
                         ? eval = alpha + 1
                         : Search(alpha + 1, 3)) > alpha &&
 
-                        // If alpha was above threshold, update eval with a search with a null window
-                        alpha < Search(alpha + 1))
+                            // If alpha was above threshold, update eval with a search with a null window
+                            alpha < Search(alpha + 1))
                     // We raised alpha on the null window search, research with no null window
                     Search(beta);
 
