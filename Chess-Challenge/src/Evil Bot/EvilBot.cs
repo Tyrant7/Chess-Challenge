@@ -193,7 +193,7 @@ namespace ChessChallenge.Example
             moveScores.Sort(moveSpan);
 
             // Gamestate, checkmate and draws
-            if (!inQSearch && moveSpan.Length == 0)
+            if (!inQSearch && moveSpan.IsEmpty)
                 return inCheck ? plyFromRoot - 99999 : 0;
 
             Move bestMove = default;

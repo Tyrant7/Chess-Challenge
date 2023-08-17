@@ -1,4 +1,4 @@
-﻿//#define DEBUG
+﻿#define DEBUG
 
 using ChessChallenge.API;
 using System;
@@ -182,13 +182,13 @@ public class MyBot : IChessBot
         foreach (Move move in moveSpan)
             moveScores[movesScored++] = -(
             // Hash move
-            move == entry.BestMove ? 100000 :
+            move == entry.BestMove ? 9_000_000 :
             // Promotions
-            // move.IsPromotion ? -10000 :
+            // move.IsPromotion ? 10000 :
             // MVVLVA
-            move.IsCapture ? 10000 * (int)move.CapturePieceType - (int)move.MovePieceType :
+            move.IsCapture ? 1_000_000 * (int)move.CapturePieceType - (int)move.MovePieceType :
             // Killers
-            killers[plyFromRoot] == move ? 1000 :
+            killers[plyFromRoot] == move ? 900_000 :
             // History
             historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index]);
 
