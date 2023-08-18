@@ -229,7 +229,7 @@ namespace ChessChallenge.Example
                 // Set eval to appropriate alpha to be read from later
                 // -> if reduction is applicable do a reduced search with a null window,
                 // othewise automatically set alpha be above the threshold
-                else if ((movesTried < 6 || depth < 3
+                else if ((movesTried < 6 || depth < 2
                         ? eval = alpha + 1
                         : Search(alpha + 1, 3)) > alpha &&
 
