@@ -12,25 +12,25 @@ namespace Chess_Challenge.src.Tuning
         private Timer searchTimer;
 
         private int[,,] historyHeuristics;
+        private readonly Move[] killers = new Move[102];
 
         Board board;
         Move rootMove;
 
 #if DEBUG
-        long nodes;
+    long nodes;
 #endif
 
         public Move Think(Board newBoard, Timer timer)
         {
 #if DEBUG
-            Console.WriteLine();
-            nodes = 0;
+        Console.WriteLine();
+        nodes = 0;
 #endif
 
             // Cache the board to save precious tokens
             board = newBoard;
 
-            // Reset history heuristics and killer moves
             historyHeuristics = new int[2, 7, 64];
 
             // 1/30th of our remaining time, split among all of the moves
@@ -38,12 +38,12 @@ namespace Chess_Challenge.src.Tuning
             searchTimer = timer;
 
             // Progressively increase search depth, starting from 2
-            for (int depth = 2, alpha = -999999, beta = 999999; ;)
+            for (int depth = 2, alpha = -999999, beta = 999999, eval; ;)
             {
-                int eval = PVS(depth, alpha, beta, 0, true);
+                eval = PVS(depth, alpha, beta, 0, true);
 
                 // Out of time
-                if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime)
+                if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime || depth > 99)
                     return rootMove;
 
                 // Gradual widening
@@ -55,14 +55,21 @@ namespace Chess_Challenge.src.Tuning
                 else
                 {
 #if DEBUG
-                    Console.WriteLine("Info: depth: {0, 2} || eval: {1, 6} || nodes: {2, 9} || nps: {3, 8} || time: {4, 5}ms || best move: {5}{6}",
-                        depth,
-                        eval,
-                        nodes,
-                        1000 * nodes / (timer.MillisecondsElapsedThisTurn + 1),
-                        timer.MillisecondsElapsedThisTurn,
-                        rootMove.StartSquare.Name,
-                        rootMove.TargetSquare.Name);
+                string evalWithMate = eval.ToString();
+                if (Math.Abs(eval) > 50000)
+                {
+                    evalWithMate = eval < 0 ? "-" : "";
+                    evalWithMate += $"M{Math.Ceiling((99998 - Math.Abs((double)eval)) / 2)}";
+                }
+
+                Console.WriteLine("Info: depth: {0, 2} || eval: {1, 6} || nodes: {2, 9} || nps: {3, 8} || time: {4, 5}ms || best move: {5}{6}",
+                    depth,
+                    evalWithMate,
+                    nodes,
+                    1000 * nodes / (timer.MillisecondsElapsedThisTurn + 1),
+                    timer.MillisecondsElapsedThisTurn,
+                    rootMove.StartSquare.Name,
+                    rootMove.TargetSquare.Name);
 #endif
 
                     // Set up window for next search
@@ -79,17 +86,21 @@ namespace Chess_Challenge.src.Tuning
         private int PVS(int depth, int alpha, int beta, int plyFromRoot, bool allowNull)
         {
 #if DEBUG
-            nodes++;
+        nodes++;
 #endif
+
+            // Endless sequence detection
+            // TODO: Test overnight
+            if (plyFromRoot >= 100)
+                return Evaluate();
 
             // Declare some reused variables
             bool inCheck = board.IsInCheck(),
-                isPV = beta - alpha > 1,
                 canPrune = false,
                 notRoot = plyFromRoot++ > 0;
 
-            // Ply check is for long forced endgame draw sequences where search can get stuck forever
-            if (notRoot && board.IsRepeatedPosition() || plyFromRoot > 50)
+            // Draw detection
+            if (notRoot && board.IsRepeatedPosition())
                 return 0;
 
             ulong zobristKey = board.ZobristKey;
@@ -101,7 +112,7 @@ namespace Chess_Challenge.src.Tuning
                 movesTried = 0,
                 entryScore = entry.Score,
                 entryFlag = entry.Flag,
-                n = 0,
+                movesScored = 0,
                 eval;
 
             //
@@ -121,6 +132,7 @@ namespace Chess_Challenge.src.Tuning
                 return entryScore;
 
             // Check extensions
+            // Ply check is for long forced endgame draw sequences where search can get stuck forever
             if (inCheck)
                 depth++;
 
@@ -130,14 +142,13 @@ namespace Chess_Challenge.src.Tuning
             {
                 // Determine if quiescence search should be continued
                 bestEval = Evaluate();
-
-                alpha = Math.Max(alpha, bestEval);
-                if (alpha >= beta)
+                if (bestEval >= beta)
                     return bestEval;
+                alpha = Math.Max(alpha, bestEval);
             }
             // No pruning in QSearch
             // If this node is NOT part of the PV and we're not in check
-            else if (!isPV && !inCheck)
+            else if (beta - alpha == 1 && !inCheck)
             {
                 // Reverse futility pruning
                 int staticEval = Evaluate();
@@ -149,7 +160,7 @@ namespace Chess_Challenge.src.Tuning
                     return staticEval;
 
                 // NULL move pruning
-                if (allowNull && depth >= 2)
+                if (allowNull && depth >= p.Parameters["NMPDepthMargin"])
                 {
                     board.TrySkipTurn();
                     Search(beta, p.Parameters["NMP_R"] + depth / p.Parameters["NMPDepthCoef"], false);
@@ -172,33 +183,34 @@ namespace Chess_Challenge.src.Tuning
             }
 
             // Generate appropriate moves depending on whether we're in QSearch
-            Span<Move> moveSpan = stackalloc Move[218];
+            Span<Move> moveSpan = stackalloc Move[242];
             board.GetLegalMovesNonAlloc(ref moveSpan, inQSearch && !inCheck);
 
             // Order moves in reverse order -> negative values are ordered higher hence the strange equations
             Span<int> moveScores = stackalloc int[moveSpan.Length];
             foreach (Move move in moveSpan)
-                moveScores[n++] =
+                moveScores[movesScored++] = -(
                 // Hash move
-                move == entry.BestMove ? -100000 :
+                move == entry.BestMove ? 9_000_000 :
                 // Promotions
-                // move.IsPromotion ? 10000 :
+                // move.IsPromotion ? 8_000_000 :
                 // MVVLVA
-                move.IsCapture ? (int)move.MovePieceType - 1000 * (int)move.CapturePieceType :
+                move.IsCapture ? 1_000_000 * (int)move.CapturePieceType - (int)move.MovePieceType :
+                // Killers
+                killers[plyFromRoot] == move ? 900_000 :
                 // History
-                historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index];
+                historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index]);
 
             moveScores.Sort(moveSpan);
 
             // Gamestate, checkmate and draws
-            if (!inQSearch && moveSpan.Length == 0)
+            if (!inQSearch && moveSpan.IsEmpty)
                 return inCheck ? plyFromRoot - 99999 : 0;
 
             Move bestMove = default;
             foreach (Move move in moveSpan)
             {
-                bool tactical = movesTried == 0 || move.IsCapture || move.IsPromotion;
-                if (canPrune && !tactical)
+                if (canPrune && !(movesTried == 0 || move.IsCapture || move.IsPromotion))
                     continue;
 
                 board.MakeMove(move);
@@ -221,7 +233,7 @@ namespace Chess_Challenge.src.Tuning
                 // Set eval to appropriate alpha to be read from later
                 // -> if reduction is applicable do a reduced search with a null window,
                 // othewise automatically set alpha be above the threshold
-                else if ((isPV || tactical || movesTried < p.Parameters["LMRTriedMargin"] || depth < p.Parameters["LMRDepthMargin"] || inCheck || board.IsInCheck()
+                else if ((movesTried < p.Parameters["LMRTriedMargin"] || depth < p.Parameters["LMRDepthMargin"]
                         ? eval = alpha + 1
                         : Search(alpha + 1, p.Parameters["LMR_R"])) > alpha &&
 
@@ -256,7 +268,10 @@ namespace Chess_Challenge.src.Tuning
                     {
                         // Update history tables
                         if (!move.IsCapture)
-                            historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index] -= depth * depth;
+                        {
+                            historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index] += depth * depth;
+                            killers[plyFromRoot] = move;
+                        }
                         break;
                     }
                 }
@@ -283,22 +298,23 @@ namespace Chess_Challenge.src.Tuning
 
         private readonly int[] GamePhaseIncrement = { 0, 1, 1, 2, 4, 0 };
 
+        // Tuned
         // Pawn, Knight, Bishop, Rook, Queen, King 
-        private readonly short[] PieceValues = { 82, 337, 365, 477, 1025, 0, // Middlegame
-                                             94, 281, 297, 512, 936, 0 }; // Endgame
+        private readonly short[] PieceValues = { 89, 309, 319, 489, 889, 0, // Middlegame
+                                                 98, 320, 330, 498, 851, 0 }; // Endgame
 
         // Big table packed with data from premade piece square tables
         // Unpack using PackedEvaluationTables[set, rank] = file
         private readonly decimal[] PackedPestoTables = {
-        63746705523041458768562654720m, 71818693703096985528394040064m, 75532537544690978830456252672m, 75536154932036771593352371712m, 76774085526445040292133284352m, 3110608541636285947269332480m, 936945638387574698250991104m, 75531285965747665584902616832m,
-        77047302762000299964198997571m, 3730792265775293618620982364m, 3121489077029470166123295018m, 3747712412930601838683035969m, 3763381335243474116535455791m, 8067176012614548496052660822m, 4977175895537975520060507415m, 2475894077091727551177487608m,
-        2458978764687427073924784380m, 3718684080556872886692423941m, 4959037324412353051075877138m, 3135972447545098299460234261m, 4371494653131335197311645996m, 9624249097030609585804826662m, 9301461106541282841985626641m, 2793818196182115168911564530m,
-        77683174186957799541255830262m, 4660418590176711545920359433m, 4971145620211324499469864196m, 5608211711321183125202150414m, 5617883191736004891949734160m, 7150801075091790966455611144m, 5619082524459738931006868492m, 649197923531967450704711664m,
-        75809334407291469990832437230m, 78322691297526401047122740223m, 4348529951871323093202439165m, 4990460191572192980035045640m, 5597312470813537077508379404m, 4980755617409140165251173636m, 1890741055734852330174483975m, 76772801025035254361275759599m,
-        75502243563200070682362835182m, 78896921543467230670583692029m, 2489164206166677455700101373m, 4338830174078735659125311481m, 4960199192571758553533648130m, 3420013420025511569771334658m, 1557077491473974933188251927m, 77376040767919248347203368440m,
-        73949978050619586491881614568m, 77043619187199676893167803647m, 1212557245150259869494540530m, 3081561358716686153294085872m, 3392217589357453836837847030m, 1219782446916489227407330320m, 78580145051212187267589731866m, 75798434925965430405537592305m,
-        68369566912511282590874449920m, 72396532057599326246617936384m, 75186737388538008131054524416m, 77027917484951889231108827392m, 73655004947793353634062267392m, 76417372019396591550492896512m, 74568981255592060493492515584m, 70529879645288096380279255040m,
-    };
+            68998241468054427673023536384m, 71175507498738781976329250048m, 73031213409986298401653320448m, 75203648367164667593920080896m, 75201230478631950183839689984m, 73029999743353456829090360064m, 71173099091832518444418983168m, 69001858763886817682394373632m,
+            73033602908579635557249377577m, 75203653219051869801757668400m, 76753496102421525276978708266m, 617770538503087663899279138m, 310698676543658300603826466m, 77372466121916443250711789858m, 74585892125352922567778825249m, 73031175630632792530777466146m,
+            72720481658674242492003052801m, 77060558519704847941411864840m, 4337630619068598422335522830m, 6502807409571203796653574422m, 6813510734602926692155918611m, 3721068987813087565987317006m, 77370052974185410110817239304m, 73032398687159111609231338751m,
+            72727735250402946259162295554m, 77679533298814112828343059202m, 5885046260616195259448495110m, 8360926394671014038303411218m, 8052650273704300815856242192m, 6504016280114488738140457222m, 76753486694847480778478388482m, 72726540436270771903045102597m,
+            72420668092077285915836017153m, 77372466140415829742001979137m, 6504021021000342818295122177m, 8050232458958003339157573132m, 8049032940977867401382399756m, 6502807409851286795938237695m, 76753486657666051430726828033m, 73345501011324337710901554687m,
+            73029976149967808544789556226m, 77376088251209001239432200956m, 3718660691435872548213425659m, 6193322399886396099012201217m, 6812301864189712893886335745m, 4028145701544882844113110520m, 77064180667309885332000343549m, 72721690565893160520268705027m,
+            72721695306273219473254835715m, 73038457705142908343252546056m, 314316009252403871387549960m, 309485028484261924531405556m, 309489713957257750597600500m, 309480287455144773551259399m, 72731390510067302195024687880m, 73031185056979849075077342724m,
+            68998236727240957746172190208m, 73650183429124357790503789312m, 73343111530633401693757827584m, 73343116271518679642754772224m, 73344329864292487334998043136m, 73647770263606626194690927872m, 73031213391179037667925550592m, 68688751717419612673135664640m,
+        };
 
         private readonly int[][] UnpackedPestoTables;
 
@@ -328,13 +344,6 @@ namespace Chess_Challenge.src.Tuning
                         square = BitboardHelper.ClearAndGetIndexOfLSB(ref mask) ^ 56 * sideToMove;
                         middlegame += UnpackedPestoTables[square][piece];
                         endgame += UnpackedPestoTables[square][piece + 6];
-
-                        // Bishop pair bonus
-                        if (piece == 2 && mask != 0)
-                        {
-                            middlegame += 22;
-                            endgame += 30;
-                        }
                     }
             // Tempo bonus to help with aspiration windows
             return (middlegame * gamephase + endgame * (24 - gamephase)) / 24 * (board.IsWhiteToMove ? 1 : -1) + gamephase / 2;
@@ -351,9 +360,9 @@ namespace Chess_Challenge.src.Tuning
         // enum Flag
         // {
         //     0 = Invalid,
-        //     1 = Exact
-        //     2 = Upperbound
-        //     3 = Lowerbound,
+        //     1 = Exact,
+        //     2 = Upperbound,
+        //     3 = Lowerbound
         // }
         private record struct TTEntry(ulong Hash, Move BestMove, int Score, int Depth, int Flag);
 

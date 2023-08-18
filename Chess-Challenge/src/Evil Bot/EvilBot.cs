@@ -29,13 +29,11 @@ namespace ChessChallenge.Example
             // Cache the board to save precious tokens
             board = newBoard;
 
-            // Age history tables
             historyHeuristics = new int[2, 7, 64];
 
             // 1/30th of our remaining time, split among all of the moves
             searchMaxTime = timer.MillisecondsRemaining / 30;
             searchTimer = timer;
-
 
             // Progressively increase search depth, starting from 2
             for (int depth = 2, alpha = -999999, beta = 999999, eval; ;)
@@ -43,7 +41,7 @@ namespace ChessChallenge.Example
                 eval = PVS(depth, alpha, beta, 0, true);
 
                 // Out of time
-                if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime || depth > 99)
+                if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime)
                     return rootMove;
 
                 // Gradual widening
@@ -77,7 +75,7 @@ namespace ChessChallenge.Example
                     beta = eval + 17;
                     depth++;
                 }
-            };
+            }
         }
 
         #region Search
@@ -89,11 +87,6 @@ namespace ChessChallenge.Example
         nodes++;
 #endif
 
-            // Endless sequence detection
-            // TODO: Test overnight
-            if (plyFromRoot >= 100)
-                return Evaluate();
-
             // Declare some reused variables
             bool inCheck = board.IsInCheck(),
                 canPrune = false,
@@ -102,6 +95,9 @@ namespace ChessChallenge.Example
             // Draw detection
             if (notRoot && board.IsRepeatedPosition())
                 return 0;
+            // Endless sequence detection
+            if (plyFromRoot > 89)
+                return Evaluate();
 
             ulong zobristKey = board.ZobristKey;
             ref TTEntry entry = ref transpositionTable[zobristKey & 0x3FFFFF];
@@ -132,7 +128,6 @@ namespace ChessChallenge.Example
                 return entryScore;
 
             // Check extensions
-            // Ply check is for long forced endgame draw sequences where search can get stuck forever
             if (inCheck)
                 depth++;
 
@@ -192,10 +187,11 @@ namespace ChessChallenge.Example
                 moveScores[movesScored++] = -(
                 // Hash move
                 move == entry.BestMove ? 9_000_000 :
-                // Promotions
-                // move.IsPromotion ? 8_000_000 :
                 // MVVLVA
+                // TODO: TEST: move.IsCapture ? 1_000_000 * (move.CapturePieceType - move.MovePieceType) :
                 move.IsCapture ? 1_000_000 * (int)move.CapturePieceType - (int)move.MovePieceType :
+                // Promotions
+                // move.IsPromotion ? 950_000 :
                 // Killers
                 killers[plyFromRoot] == move ? 900_000 :
                 // History
@@ -233,7 +229,7 @@ namespace ChessChallenge.Example
                 // Set eval to appropriate alpha to be read from later
                 // -> if reduction is applicable do a reduced search with a null window,
                 // othewise automatically set alpha be above the threshold
-                else if ((movesTried < 6 || depth < 2
+                else if ((movesTried < 6 || depth < 3
                         ? eval = alpha + 1
                         : Search(alpha + 1, 3)) > alpha &&
 
