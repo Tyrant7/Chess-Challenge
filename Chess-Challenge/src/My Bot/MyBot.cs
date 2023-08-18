@@ -5,7 +5,6 @@ using System;
 using System.Linq;
 
 // TODO: Fully test promotion ordering (below captures, above killers)
-// TODO: Retest LMR R of 3 vs LMR R of 2 again and actually wait for the test to finish
 
 public class MyBot : IChessBot
 {
@@ -14,6 +13,10 @@ public class MyBot : IChessBot
 
     private int[,,] historyHeuristics;
     private readonly Move[] killers = new Move[102];
+
+    int[] moveScores = new int[218];
+
+    private bool OutOfTime => searchTimer.MillisecondsElapsedThisTurn > searchMaxTime;
 
     Board board;
     Move rootMove;
@@ -44,7 +47,7 @@ public class MyBot : IChessBot
             eval = PVS(depth, alpha, beta, 0, true);
 
             // Out of time
-            if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime || depth > 99)
+            if (OutOfTime)
                 return rootMove;
 
             // Gradual widening
@@ -93,14 +96,11 @@ public class MyBot : IChessBot
         // Declare some reused variables
         bool inCheck = board.IsInCheck(),
             canPrune = false,
-            notRoot = plyFromRoot++ > 0;
+            isRoot = plyFromRoot++ == 0;
 
         // Draw detection
-        if (notRoot && board.IsRepeatedPosition())
+        if (!isRoot && board.IsRepeatedPosition())
             return 0;
-        // Endless sequence detection
-        if (plyFromRoot > 89)
-            return Evaluate();
 
         ulong zobristKey = board.ZobristKey;
         ref TTEntry entry = ref transpositionTable[zobristKey & 0x3FFFFF];
@@ -121,7 +121,7 @@ public class MyBot : IChessBot
         //
 
         // Transposition table lookup -> Found a valid entry for this position
-        if (entry.Hash == zobristKey && notRoot && entry.Depth >= depth && (
+        if (entry.Hash == zobristKey && !isRoot && entry.Depth >= depth && (
                 // Exact
                 entryFlag == 1 ||
                 // Upperbound
@@ -181,34 +181,41 @@ public class MyBot : IChessBot
         }
 
         // Generate appropriate moves depending on whether we're in QSearch
-        Span<Move> moveSpan = stackalloc Move[242];
+        Span<Move> moveSpan = stackalloc Move[218];
         board.GetLegalMovesNonAlloc(ref moveSpan, inQSearch && !inCheck);
 
         // Order moves in reverse order -> negative values are ordered higher hence the flipped values
-        Span<int> moveScores = stackalloc int[moveSpan.Length];
         foreach (Move move in moveSpan)
             moveScores[movesScored++] = -(
             // Hash move
             move == entry.BestMove ? 9_000_000 :
-            // Promotions
-            // move.IsPromotion ? 5_000_000 :
             // MVVLVA
             // TODO: TEST: move.IsCapture ? 1_000_000 * (move.CapturePieceType - move.MovePieceType) :
             move.IsCapture ? 1_000_000 * (int)move.CapturePieceType - (int)move.MovePieceType :
+            // Promotions
+            // move.IsPromotion ? 950_000 :
             // Killers
             killers[plyFromRoot] == move ? 900_000 :
             // History
             historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index]);
 
-        moveScores.Sort(moveSpan);
+        moveScores.AsSpan(0, moveSpan.Length).Sort(moveSpan);
 
         // Gamestate, checkmate and draws
         if (!inQSearch && moveSpan.IsEmpty)
             return inCheck ? plyFromRoot - 99999 : 0;
 
+        // Initialize the root move to our first move in case we time out before any branches are searched
+        if (isRoot)
+            rootMove = moveSpan[0];
+
         Move bestMove = default;
         foreach (Move move in moveSpan)
         {
+            // Out of time => return a large value guaranteed to be less than alpha when negated
+            if (OutOfTime)
+                return 99999999;
+
             if (canPrune && !(movesTried == 0 || move.IsCapture || move.IsPromotion))
                 continue;
 
@@ -257,7 +264,7 @@ public class MyBot : IChessBot
                 bestEval = eval;
 
                 // Update the root move
-                if (!notRoot)
+                if (isRoot)
                     rootMove = move;
 
                 alpha = Math.Max(eval, alpha);
@@ -274,10 +281,6 @@ public class MyBot : IChessBot
                     break;
                 }
             }
-
-            // Out of time => return a large value guaranteed to be less than alpha when negated
-            if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime)
-                return 99999999;
         }
 
         // Transposition table insertion

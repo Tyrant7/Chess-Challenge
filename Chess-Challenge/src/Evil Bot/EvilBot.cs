@@ -12,6 +12,10 @@ namespace ChessChallenge.Example
         private int[,,] historyHeuristics;
         private readonly Move[] killers = new Move[102];
 
+        int[] moveScores = new int[218];
+
+        private bool OutOfTime => searchTimer.MillisecondsElapsedThisTurn > searchMaxTime;
+
         Board board;
         Move rootMove;
 
@@ -41,7 +45,7 @@ namespace ChessChallenge.Example
                 eval = PVS(depth, alpha, beta, 0, true);
 
                 // Out of time
-                if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime || depth > 99)
+                if (OutOfTime)
                     return rootMove;
 
                 // Gradual widening
@@ -90,14 +94,11 @@ namespace ChessChallenge.Example
             // Declare some reused variables
             bool inCheck = board.IsInCheck(),
                 canPrune = false,
-                notRoot = plyFromRoot++ > 0;
+                isRoot = plyFromRoot++ == 0;
 
             // Draw detection
-            if (notRoot && board.IsRepeatedPosition())
+            if (!isRoot && board.IsRepeatedPosition())
                 return 0;
-            // Endless sequence detection
-            if (plyFromRoot > 89)
-                return Evaluate();
 
             ulong zobristKey = board.ZobristKey;
             ref TTEntry entry = ref transpositionTable[zobristKey & 0x3FFFFF];
@@ -118,7 +119,7 @@ namespace ChessChallenge.Example
             //
 
             // Transposition table lookup -> Found a valid entry for this position
-            if (entry.Hash == zobristKey && notRoot && entry.Depth >= depth && (
+            if (entry.Hash == zobristKey && !isRoot && entry.Depth >= depth && (
                     // Exact
                     entryFlag == 1 ||
                     // Upperbound
@@ -178,11 +179,10 @@ namespace ChessChallenge.Example
             }
 
             // Generate appropriate moves depending on whether we're in QSearch
-            Span<Move> moveSpan = stackalloc Move[242];
+            Span<Move> moveSpan = stackalloc Move[218];
             board.GetLegalMovesNonAlloc(ref moveSpan, inQSearch && !inCheck);
 
-            // Order moves in reverse order -> negative values are ordered higher hence the strange equations
-            Span<int> moveScores = stackalloc int[moveSpan.Length];
+            // Order moves in reverse order -> negative values are ordered higher hence the flipped values
             foreach (Move move in moveSpan)
                 moveScores[movesScored++] = -(
                 // Hash move
@@ -197,15 +197,23 @@ namespace ChessChallenge.Example
                 // History
                 historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index]);
 
-            moveScores.Sort(moveSpan);
+            moveScores.AsSpan(0, moveSpan.Length).Sort(moveSpan);
 
             // Gamestate, checkmate and draws
             if (!inQSearch && moveSpan.IsEmpty)
                 return inCheck ? plyFromRoot - 99999 : 0;
 
+            // Initialize the root move to our first move in case we time out before any branches are searched
+            if (isRoot)
+                rootMove = moveSpan[0];
+
             Move bestMove = default;
             foreach (Move move in moveSpan)
             {
+                // Out of time => return a large value guaranteed to be less than alpha when negated
+                if (OutOfTime)
+                    return 99999999;
+
                 if (canPrune && !(movesTried == 0 || move.IsCapture || move.IsPromotion))
                     continue;
 
@@ -254,7 +262,7 @@ namespace ChessChallenge.Example
                     bestEval = eval;
 
                     // Update the root move
-                    if (!notRoot)
+                    if (isRoot)
                         rootMove = move;
 
                     alpha = Math.Max(eval, alpha);
@@ -271,10 +279,6 @@ namespace ChessChallenge.Example
                         break;
                     }
                 }
-
-                // Out of time => return a large value guaranteed to be less than alpha when negated
-                if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime)
-                    return 99999999;
             }
 
             // Transposition table insertion
@@ -298,13 +302,6 @@ namespace ChessChallenge.Example
         private readonly short[] PieceValues = { 82, 337, 365, 477, 1025, 0, // Middlegame
                                              94, 281, 297, 512, 936, 0 }; // Endgame
 
-        // Tuned
-        // Pawn, Knight, Bishop, Rook, Queen, King 
-        /*
-        private readonly short[] PieceValues = { 89, 309, 319, 489, 889, 0, // Middlegame
-                                                 98, 320, 330, 498, 851, 0 }; // Endgame
-        */
-
         // Big table packed with data from premade piece square tables
         // Unpack using PackedEvaluationTables[set, rank] = file
         private readonly decimal[] PackedPestoTables = {
@@ -317,20 +314,6 @@ namespace ChessChallenge.Example
         73949978050619586491881614568m, 77043619187199676893167803647m, 1212557245150259869494540530m, 3081561358716686153294085872m, 3392217589357453836837847030m, 1219782446916489227407330320m, 78580145051212187267589731866m, 75798434925965430405537592305m,
         68369566912511282590874449920m, 72396532057599326246617936384m, 75186737388538008131054524416m, 77027917484951889231108827392m, 73655004947793353634062267392m, 76417372019396591550492896512m, 74568981255592060493492515584m, 70529879645288096380279255040m,
     };
-
-        // TUNED
-        /*
-        private readonly decimal[] PackedPestoTables = {
-            68998241468054427673023536384m, 71175507498738781976329250048m, 73031213409986298401653320448m, 75203648367164667593920080896m, 75201230478631950183839689984m, 73029999743353456829090360064m, 71173099091832518444418983168m, 69001858763886817682394373632m,
-            73033602908579635557249377577m, 75203653219051869801757668400m, 76753496102421525276978708266m, 617770538503087663899279138m, 310698676543658300603826466m, 77372466121916443250711789858m, 74585892125352922567778825249m, 73031175630632792530777466146m,
-            72720481658674242492003052801m, 77060558519704847941411864840m, 4337630619068598422335522830m, 6502807409571203796653574422m, 6813510734602926692155918611m, 3721068987813087565987317006m, 77370052974185410110817239304m, 73032398687159111609231338751m,
-            72727735250402946259162295554m, 77679533298814112828343059202m, 5885046260616195259448495110m, 8360926394671014038303411218m, 8052650273704300815856242192m, 6504016280114488738140457222m, 76753486694847480778478388482m, 72726540436270771903045102597m,
-            72420668092077285915836017153m, 77372466140415829742001979137m, 6504021021000342818295122177m, 8050232458958003339157573132m, 8049032940977867401382399756m, 6502807409851286795938237695m, 76753486657666051430726828033m, 73345501011324337710901554687m,
-            73029976149967808544789556226m, 77376088251209001239432200956m, 3718660691435872548213425659m, 6193322399886396099012201217m, 6812301864189712893886335745m, 4028145701544882844113110520m, 77064180667309885332000343549m, 72721690565893160520268705027m,
-            72721695306273219473254835715m, 73038457705142908343252546056m, 314316009252403871387549960m, 309485028484261924531405556m, 309489713957257750597600500m, 309480287455144773551259399m, 72731390510067302195024687880m, 73031185056979849075077342724m,
-            68998236727240957746172190208m, 73650183429124357790503789312m, 73343111530633401693757827584m, 73343116271518679642754772224m, 73344329864292487334998043136m, 73647770263606626194690927872m, 73031213391179037667925550592m, 68688751717419612673135664640m,
-        };
-        */
 
         private readonly int[][] UnpackedPestoTables;
 
