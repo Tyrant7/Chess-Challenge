@@ -4,9 +4,9 @@ using ChessChallenge.API;
 using System;
 using System.Linq;
 
-// TODO: More token saves
 // TODO: Fully test promotion ordering
 // TODO: Test removing the tempo bonus
+// TODO: Retest non alloc move generation vs regular
 
 public class MyBot : IChessBot
 {
@@ -14,7 +14,7 @@ public class MyBot : IChessBot
     private Timer searchTimer;
 
     private int[,,] historyHeuristics;
-    private readonly Move[] killers = new Move[52];
+    private readonly Move[] killers = new Move[102];
 
     Board board;
     Move rootMove;
@@ -33,12 +33,10 @@ public class MyBot : IChessBot
         // Cache the board to save precious tokens
         board = newBoard;
 
-        // Reset history heuristics and killer moves
         historyHeuristics = new int[2, 7, 64];
 
         // 1/30th of our remaining time, split among all of the moves
         searchMaxTime = timer.MillisecondsRemaining / 30;
-        searchMaxTime = 2500;
         searchTimer = timer;
 
         // Progressively increase search depth, starting from 2
@@ -47,7 +45,7 @@ public class MyBot : IChessBot
             eval = PVS(depth, alpha, beta, 0, true);
 
             // Out of time
-            if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime)
+            if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime || depth > 99)
                 return rootMove;
 
             // Gradual widening
@@ -93,14 +91,18 @@ public class MyBot : IChessBot
         nodes++;
 #endif
 
+        // Endless sequence detection
+        // TODO: Test overnight
+        if (plyFromRoot >= 100)
+            return Evaluate();
+
         // Declare some reused variables
         bool inCheck = board.IsInCheck(),
-            isPV = beta - alpha > 1,
             canPrune = false,
             notRoot = plyFromRoot++ > 0;
 
-        // Ply check is for long forced endgame draw sequences where search can get stuck forever
-        if (notRoot && board.IsRepeatedPosition() || plyFromRoot > 50)
+        // Draw detection
+        if (notRoot && board.IsRepeatedPosition())
             return 0;
 
         ulong zobristKey = board.ZobristKey;
@@ -132,6 +134,7 @@ public class MyBot : IChessBot
             return entryScore;
 
         // Check extensions
+        // Ply check is for long forced endgame draw sequences where search can get stuck forever
         if (inCheck)
             depth++;
 
@@ -147,7 +150,7 @@ public class MyBot : IChessBot
         }
         // No pruning in QSearch
         // If this node is NOT part of the PV and we're not in check
-        else if (!isPV && !inCheck)
+        else if (beta - alpha == 1 && !inCheck)
         {
             // Reverse futility pruning
             int staticEval = Evaluate();
