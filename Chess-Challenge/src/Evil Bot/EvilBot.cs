@@ -41,7 +41,7 @@ namespace ChessChallenge.Example
                 eval = PVS(depth, alpha, beta, 0, true);
 
                 // Out of time
-                if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime)
+                if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime || depth > 99)
                     return rootMove;
 
                 // Gradual widening
