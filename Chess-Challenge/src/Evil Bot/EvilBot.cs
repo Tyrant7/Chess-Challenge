@@ -10,7 +10,7 @@ namespace ChessChallenge.Example
         private Timer searchTimer;
 
         private int[,,] historyHeuristics;
-        private readonly Move[] killers = new Move[102];
+        private readonly Move[] killers = new Move[2048];
 
         int[] moveScores = new int[218];
 

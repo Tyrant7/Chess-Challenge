@@ -5,6 +5,8 @@ using System;
 using System.Linq;
 
 // TODO: Fully test promotion ordering (below captures, above killers)
+// TODO: Try out LMR with movesTried / x
+// TODO: Try to get an iterative sort working for the moves
 
 public class MyBot : IChessBot
 {
@@ -12,11 +14,9 @@ public class MyBot : IChessBot
     private Timer searchTimer;
 
     private int[,,] historyHeuristics;
-    private readonly Move[] killers = new Move[102];
+    private readonly Move[] killers = new Move[2048];
 
-    int[] moveScores = new int[218];
-
-    private bool OutOfTime => searchTimer.MillisecondsElapsedThisTurn > searchMaxTime;
+    private readonly int[] moveScores = new int[218];
 
     Board board;
     Move rootMove;
@@ -47,7 +47,7 @@ public class MyBot : IChessBot
             eval = PVS(depth, alpha, beta, 0, true);
 
             // Out of time
-            if (OutOfTime)
+            if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime)
                 return rootMove;
 
             // Gradual widening
@@ -95,7 +95,7 @@ public class MyBot : IChessBot
 
         // Declare some reused variables
         bool inCheck = board.IsInCheck(),
-            canPrune = false,
+            canFPrune = false,
             isRoot = plyFromRoot++ == 0;
 
         // Draw detection
@@ -171,7 +171,7 @@ public class MyBot : IChessBot
 
             // Extended futility pruning
             // Can only prune when at lower depth and behind in evaluation by a large margin
-            canPrune = depth <= 8 && staticEval + depth * 141 <= alpha;
+            canFPrune = depth <= 8 && staticEval + depth * 141 <= alpha;
 
             // Razoring (reduce depth if up a significant margin at depth 3)
             /*
@@ -190,10 +190,7 @@ public class MyBot : IChessBot
             // Hash move
             move == entry.BestMove ? 9_000_000 :
             // MVVLVA
-            // TODO: TEST: move.IsCapture ? 1_000_000 * (move.CapturePieceType - move.MovePieceType) :
             move.IsCapture ? 1_000_000 * (int)move.CapturePieceType - (int)move.MovePieceType :
-            // Promotions
-            // move.IsPromotion ? 950_000 :
             // Killers
             killers[plyFromRoot] == move ? 900_000 :
             // History
@@ -213,11 +210,19 @@ public class MyBot : IChessBot
         foreach (Move move in moveSpan)
         {
             // Out of time => return a large value guaranteed to be less than alpha when negated
-            if (OutOfTime)
+            if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime)
                 return 99999999;
 
-            if (canPrune && !(movesTried == 0 || move.IsCapture || move.IsPromotion))
+            // Futility pruning
+            bool tactical = movesTried == 0 || move.IsCapture || move.IsPromotion;
+            if (canFPrune && !tactical)
                 continue;
+
+            // Late move pruning
+            /*
+            if (beta - alpha == 1 && !inCheck && !tactical && movesTried > 4 + depth * depth)
+                break;
+            */
 
             board.MakeMove(move);
 
