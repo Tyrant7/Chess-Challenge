@@ -10,6 +10,18 @@ using System.Linq;
 
 public class MyBot : IChessBot
 {
+    // enum Flag
+    // {
+    //     0 = Invalid,
+    //     1 = Exact,
+    //     2 = Upperbound,
+    //     3 = Lowerbound
+    // }
+
+    // 0x400000 represents the rough number of entries it would take to fill 256mb
+    // Very lowballed to make sure I don't go over
+    private readonly (ulong, Move, int, int, int)[] transpositionTable = new (ulong, Move, int, int, int)[0x400000];
+
     private int searchMaxTime;
     private Timer searchTimer;
 
@@ -103,14 +115,14 @@ public class MyBot : IChessBot
             return 0;
 
         ulong zobristKey = board.ZobristKey;
-        ref TTEntry entry = ref transpositionTable[zobristKey & 0x3FFFFF];
+        ref var entry = ref transpositionTable[zobristKey & 0x3FFFFF];
 
         // Define best eval all the way up here to generate the standing pattern for QSearch
         int bestEval = -9999999,
             originalAlpha = alpha,
             movesTried = 0,
-            entryScore = entry.Score,
-            entryFlag = entry.Flag,
+            entryScore = entry.Item3,
+            entryFlag = entry.Item5,
             movesScored = 0,
             eval;
 
@@ -121,7 +133,7 @@ public class MyBot : IChessBot
         //
 
         // Transposition table lookup -> Found a valid entry for this position
-        if (entry.Hash == zobristKey && !isRoot && entry.Depth >= depth && (
+        if (entry.Item1 == zobristKey && !isRoot && entry.Item4 >= depth && (
                 // Exact
                 entryFlag == 1 ||
                 // Upperbound
@@ -188,7 +200,7 @@ public class MyBot : IChessBot
         foreach (Move move in moveSpan)
             moveScores[movesScored++] = -(
             // Hash move
-            move == entry.BestMove ? 9_000_000 :
+            move == entry.Item2 ? 9_000_000 :
             // MVVLVA
             move.IsCapture ? 1_000_000 * (int)move.CapturePieceType - (int)move.MovePieceType :
             // Killers
@@ -343,26 +355,9 @@ public class MyBot : IChessBot
                     middlegame += UnpackedPestoTables[square][piece];
                     endgame += UnpackedPestoTables[square][piece + 6];
                 }
-                                                                                                        // Tempo bonus to help with aspiration windows
+        // Tempo bonus to help with aspiration windows
         return (middlegame * gamephase + endgame * (24 - gamephase)) / 24 * (board.IsWhiteToMove ? 1 : -1) + gamephase / 2;
     }
-
-    #endregion
-
-    #region Transposition Table
-
-    // 0x400000 represents the rough number of entries it would take to fill 256mb
-    // Very lowballed to make sure I don't go over
-    private readonly TTEntry[] transpositionTable = new TTEntry[0x400000];
-
-    // enum Flag
-    // {
-    //     0 = Invalid,
-    //     1 = Exact,
-    //     2 = Upperbound,
-    //     3 = Lowerbound
-    // }
-    private record struct TTEntry(ulong Hash, Move BestMove, int Score, int Depth, int Flag);
 
     #endregion
 }
