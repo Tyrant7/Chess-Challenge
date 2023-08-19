@@ -160,7 +160,7 @@ public class MyBot : IChessBot
             // NULL move pruning
             if (allowNull && depth >= 2)
             {
-                board.TrySkipTurn();
+                board.ForceSkipTurn();
                 Search(beta, 3 + depth / 5, false);
                 board.UndoSkipTurn();
 
@@ -214,15 +214,8 @@ public class MyBot : IChessBot
                 return 99999999;
 
             // Futility pruning
-            bool tactical = movesTried == 0 || move.IsCapture || move.IsPromotion;
-            if (canFPrune && !tactical)
+            if (canFPrune && !(movesTried == 0 || move.IsCapture || move.IsPromotion))
                 continue;
-
-            // Late move pruning
-            /*
-            if (beta - alpha == 1 && !inCheck && !tactical && movesTried > 4 + depth * depth)
-                break;
-            */
 
             board.MakeMove(move);
 

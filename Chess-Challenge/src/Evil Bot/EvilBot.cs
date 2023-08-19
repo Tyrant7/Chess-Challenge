@@ -158,7 +158,7 @@ namespace ChessChallenge.Example
                 // NULL move pruning
                 if (allowNull && depth >= 2)
                 {
-                    board.TrySkipTurn();
+                    board.ForceSkipTurn();
                     Search(beta, 3 + depth / 5, false);
                     board.UndoSkipTurn();
 
