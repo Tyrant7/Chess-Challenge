@@ -6,15 +6,25 @@ namespace ChessChallenge.Example
 {
     public class EvilBot : IChessBot
     {
+        // enum Flag
+        // {
+        //     0 = Invalid,
+        //     1 = Exact,
+        //     2 = Upperbound,
+        //     3 = Lowerbound
+        // }
+
+        // 0x400000 represents the rough number of entries it would take to fill 256mb
+        // Very lowballed to make sure I don't go over
+        private readonly (ulong, Move, int, int, int)[] transpositionTable = new (ulong, Move, int, int, int)[0x400000];
+
         private int searchMaxTime;
         private Timer searchTimer;
 
         private int[,,] historyHeuristics;
         private readonly Move[] killers = new Move[2048];
 
-        int[] moveScores = new int[218];
-
-        private bool OutOfTime => searchTimer.MillisecondsElapsedThisTurn > searchMaxTime;
+        private readonly int[] moveScores = new int[218];
 
         Board board;
         Move rootMove;
@@ -45,7 +55,7 @@ namespace ChessChallenge.Example
                 eval = PVS(depth, alpha, beta, 0, true);
 
                 // Out of time
-                if (OutOfTime)
+                if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime)
                     return rootMove;
 
                 // Gradual widening
@@ -93,7 +103,7 @@ namespace ChessChallenge.Example
 
             // Declare some reused variables
             bool inCheck = board.IsInCheck(),
-                canPrune = false,
+                canFPrune = false,
                 isRoot = plyFromRoot++ == 0;
 
             // Draw detection
@@ -101,14 +111,14 @@ namespace ChessChallenge.Example
                 return 0;
 
             ulong zobristKey = board.ZobristKey;
-            ref TTEntry entry = ref transpositionTable[zobristKey & 0x3FFFFF];
+            ref var entry = ref transpositionTable[zobristKey & 0x3FFFFF];
 
             // Define best eval all the way up here to generate the standing pattern for QSearch
             int bestEval = -9999999,
                 originalAlpha = alpha,
                 movesTried = 0,
-                entryScore = entry.Score,
-                entryFlag = entry.Flag,
+                entryScore = entry.Item3,
+                entryFlag = entry.Item5,
                 movesScored = 0,
                 eval;
 
@@ -119,7 +129,7 @@ namespace ChessChallenge.Example
             //
 
             // Transposition table lookup -> Found a valid entry for this position
-            if (entry.Hash == zobristKey && !isRoot && entry.Depth >= depth && (
+            if (entry.Item1 == zobristKey && !isRoot && entry.Item4 >= depth && (
                     // Exact
                     entryFlag == 1 ||
                     // Upperbound
@@ -169,7 +179,7 @@ namespace ChessChallenge.Example
 
                 // Extended futility pruning
                 // Can only prune when at lower depth and behind in evaluation by a large margin
-                canPrune = depth <= 8 && staticEval + depth * 141 <= alpha;
+                canFPrune = depth <= 8 && staticEval + depth * 141 <= alpha;
 
                 // Razoring (reduce depth if up a significant margin at depth 3)
                 /*
@@ -186,12 +196,9 @@ namespace ChessChallenge.Example
             foreach (Move move in moveSpan)
                 moveScores[movesScored++] = -(
                 // Hash move
-                move == entry.BestMove ? 9_000_000 :
+                move == entry.Item2 ? 9_000_000 :
                 // MVVLVA
-                // TODO: TEST: move.IsCapture ? 1_000_000 * (move.CapturePieceType - move.MovePieceType) :
                 move.IsCapture ? 1_000_000 * (int)move.CapturePieceType - (int)move.MovePieceType :
-                // Promotions
-                // move.IsPromotion ? 950_000 :
                 // Killers
                 killers[plyFromRoot] == move ? 900_000 :
                 // History
@@ -211,10 +218,11 @@ namespace ChessChallenge.Example
             foreach (Move move in moveSpan)
             {
                 // Out of time => return a large value guaranteed to be less than alpha when negated
-                if (OutOfTime)
+                if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime)
                     return 99999999;
 
-                if (canPrune && !(movesTried == 0 || move.IsCapture || move.IsPromotion))
+                // Futility pruning
+                if (canFPrune && !(movesTried == 0 || move.IsCapture || move.IsPromotion))
                     continue;
 
                 board.MakeMove(move);
@@ -346,23 +354,6 @@ namespace ChessChallenge.Example
             // Tempo bonus to help with aspiration windows
             return (middlegame * gamephase + endgame * (24 - gamephase)) / 24 * (board.IsWhiteToMove ? 1 : -1) + gamephase / 2;
         }
-
-        #endregion
-
-        #region Transposition Table
-
-        // 0x400000 represents the rough number of entries it would take to fill 256mb
-        // Very lowballed to make sure I don't go over
-        private readonly TTEntry[] transpositionTable = new TTEntry[0x400000];
-
-        // enum Flag
-        // {
-        //     0 = Invalid,
-        //     1 = Exact,
-        //     2 = Upperbound,
-        //     3 = Lowerbound
-        // }
-        private record struct TTEntry(ulong Hash, Move BestMove, int Score, int Depth, int Flag);
 
         #endregion
     }

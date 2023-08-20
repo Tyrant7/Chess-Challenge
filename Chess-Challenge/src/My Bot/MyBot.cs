@@ -5,6 +5,7 @@ using System;
 using System.Linq;
 
 // TODO: Fully test promotion ordering (below captures, above killers)
+// TODO: Test out starting iterative deepening at depth 1 instead of 2
 // TODO: Try out LMR with movesTried / x
 // TODO: Try to get an iterative sort working for the moves
 
@@ -20,6 +21,7 @@ public class MyBot : IChessBot
 
     // 0x400000 represents the rough number of entries it would take to fill 256mb
     // Very lowballed to make sure I don't go over
+    // Hash, Move, Score, Depth, Flag
     private readonly (ulong, Move, int, int, int)[] transpositionTable = new (ulong, Move, int, int, int)[0x400000];
 
     private int searchMaxTime;
@@ -270,14 +272,16 @@ public class MyBot : IChessBot
 
             if (eval > bestEval)
             {
-                bestMove = move;
                 bestEval = eval;
+                if (eval > alpha)
+                {
+                    alpha = eval;
+                    bestMove = move;
 
-                // Update the root move
-                if (isRoot)
-                    rootMove = move;
-
-                alpha = Math.Max(eval, alpha);
+                    // Update the root move
+                    if (isRoot)
+                        rootMove = move;
+                }
 
                 // Cutoff
                 if (alpha >= beta)
@@ -296,7 +300,7 @@ public class MyBot : IChessBot
         // Transposition table insertion
         entry = new(
             zobristKey,
-            bestMove,
+            bestMove == default ? entry.Item2 : bestMove,
             bestEval,
             depth,
             bestEval >= beta ? 3 : bestEval <= originalAlpha ? 2 : 1);
