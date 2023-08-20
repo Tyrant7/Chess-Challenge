@@ -1,4 +1,4 @@
-﻿//#define DEBUG
+﻿#define DEBUG
 
 using ChessChallenge.API;
 using System;
@@ -175,7 +175,7 @@ public class MyBot : IChessBot
             if (allowNull && depth >= 2)
             {
                 board.ForceSkipTurn();
-                Search(beta, 3 + depth / 5, false);
+                Search(beta, 3 + (depth >> 2), false);
                 board.UndoSkipTurn();
 
                 // Failed high on the null move

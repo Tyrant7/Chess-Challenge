@@ -169,7 +169,6 @@ namespace ChessChallenge.Example
                 // NULL move pruning
                 if (allowNull && depth >= 2)
                 {
-                    // int r = Math.Max(staticEval - beta / 200, 3);
                     board.ForceSkipTurn();
                     Search(beta, 3 + depth / 5, false);
                     board.UndoSkipTurn();
@@ -320,7 +319,7 @@ namespace ChessChallenge.Example
         {
             // Big table packed with data from premade piece square tables
             // Access using using PackedEvaluationTables[square][pieceType] = score
-            UnpackedPestoTables = new[] {
+            UnpackedPestoTables = new[]{
             63746705523041458768562654720m, 71818693703096985528394040064m, 75532537544690978830456252672m, 75536154932036771593352371712m, 76774085526445040292133284352m, 3110608541636285947269332480m, 936945638387574698250991104m, 75531285965747665584902616832m,
             77047302762000299964198997571m, 3730792265775293618620982364m, 3121489077029470166123295018m, 3747712412930601838683035969m, 3763381335243474116535455791m, 8067176012614548496052660822m, 4977175895537975520060507415m, 2475894077091727551177487608m,
             2458978764687427073924784380m, 3718684080556872886692423941m, 4959037324412353051075877138m, 3135972447545098299460234261m, 4371494653131335197311645996m, 9624249097030609585804826662m, 9301461106541282841985626641m, 2793818196182115168911564530m,
@@ -352,13 +351,6 @@ namespace ChessChallenge.Example
                         square = BitboardHelper.ClearAndGetIndexOfLSB(ref mask) ^ 56 * sideToMove;
                         middlegame += UnpackedPestoTables[square][piece];
                         endgame += UnpackedPestoTables[square][piece + 6];
-
-                        /*
-                        if (piece < 5)
-                        {
-                            middlegame += 2 * 
-                        }
-                        */
                     }
             // Tempo bonus to help with aspiration windows
             return (middlegame * gamephase + endgame * (24 - gamephase)) / 24 * (board.IsWhiteToMove ? 1 : -1) + gamephase / 2;
