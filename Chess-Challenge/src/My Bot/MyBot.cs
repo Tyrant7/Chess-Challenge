@@ -216,15 +216,11 @@ public class MyBot : IChessBot
         if (!inQSearch && moveSpan.IsEmpty)
             return inCheck ? plyFromRoot - 99999 : 0;
 
-        // Initialize the root move to our first move in case we time out before any branches are searched
-        if (isRoot)
-            rootMove = moveSpan[0];
-
         Move bestMove = default;
         foreach (Move move in moveSpan)
         {
             // Out of time => return a large value guaranteed to be less than alpha when negated
-            if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime)
+            if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime && depth >= 2)
                 return 99999999;
 
             // Futility pruning
