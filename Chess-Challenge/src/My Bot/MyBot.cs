@@ -350,11 +350,7 @@ public class MyBot : IChessBot
                     gamephase += GamePhaseIncrement[piece];
 
                     // Material and square evaluation
-                    square = BitboardHelper.ClearAndGetIndexOfLSB(ref mask);
-
-                    middlegame += BitboardHelper.GetNumberOfSetBits(BitboardHelper.GetPieceAttacks((PieceType)piece + 1, new Square(square), board, sideToMove > 0));
-
-                    square ^= 56 * sideToMove;
+                    square = BitboardHelper.ClearAndGetIndexOfLSB(ref mask) ^ 56 * sideToMove;
                     middlegame += UnpackedPestoTables[square][piece];
                     endgame += UnpackedPestoTables[square][piece + 6];
                 }
