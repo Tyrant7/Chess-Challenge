@@ -173,7 +173,7 @@ public class MyBot : IChessBot
                 return staticEval;
 
             // NULL move pruning
-            if (allowNull && depth >= 2)
+            if (depth >= 2 && allowNull)
             {
                 board.ForceSkipTurn();
                 Search(beta, 3 + (depth >> 2), false);
@@ -223,7 +223,7 @@ public class MyBot : IChessBot
             // Out of time -> return checkmate so that this move is ignored
             // but better than the worst eval so a move is still picked if no moves are looked at
             // Depth check is to disallow timeouts before the bot has found a move
-            if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime && depth > 2)
+            if (depth > 2 && searchTimer.MillisecondsElapsedThisTurn > searchMaxTime)
                 return 99999;
 
             // Futility pruning

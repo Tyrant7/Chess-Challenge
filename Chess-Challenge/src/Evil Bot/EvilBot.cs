@@ -131,7 +131,8 @@ namespace ChessChallenge.Example
             //
 
             // Transposition table lookup -> Found a valid entry for this position
-            if (entry.Item1 == zobristKey && !isRoot && entry.Item4 >= depth && (
+            // Avoid retrieving mate scores from the TT since they aren't accurate to the ply
+            if (entry.Item1 == zobristKey && !isRoot && entry.Item4 >= depth && Math.Abs(entryScore) < 50000 && (
                     // Exact
                     entryFlag == 1 ||
                     // Upperbound
@@ -168,7 +169,7 @@ namespace ChessChallenge.Example
                     return staticEval;
 
                 // NULL move pruning
-                if (allowNull && depth >= 2)
+                if (depth >= 2 && allowNull)
                 {
                     board.ForceSkipTurn();
                     Search(beta, 3 + (depth >> 2), false);
@@ -218,7 +219,7 @@ namespace ChessChallenge.Example
                 // Out of time -> return checkmate so that this move is ignored
                 // but better than the worst eval so a move is still picked if no moves are looked at
                 // Depth check is to disallow timeouts before the bot has found a move
-                if (searchTimer.MillisecondsElapsedThisTurn > searchMaxTime && depth > 2)
+                if (depth > 2 && searchTimer.MillisecondsElapsedThisTurn > searchMaxTime)
                     return 99999;
 
                 // Futility pruning
