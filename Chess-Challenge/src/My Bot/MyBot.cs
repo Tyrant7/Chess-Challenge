@@ -135,7 +135,8 @@ public class MyBot : IChessBot
         //
 
         // Transposition table lookup -> Found a valid entry for this position
-        if (entry.Item1 == zobristKey && !isRoot && entry.Item4 >= depth && (
+        // Avoid retrieving mate scores from the TT since they aren't accurate to the ply
+        if (entry.Item1 == zobristKey && !isRoot && entry.Item4 >= depth && Math.Abs(entryScore) < 50000 && (
                 // Exact
                 entryFlag == 1 ||
                 // Upperbound
@@ -214,7 +215,7 @@ public class MyBot : IChessBot
 
         // Gamestate, checkmate and draws
         if (!inQSearch && moveSpan.IsEmpty)
-            return inCheck ? plyFromRoot - 99999 : 0;
+            return inCheck ? plyFromRoot -99999 : 0;
 
         Move bestMove = default;
         foreach (Move move in moveSpan)
