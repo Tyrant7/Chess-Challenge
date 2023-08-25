@@ -6,7 +6,7 @@ using System.Linq;
 
 // TODO: Look into adding a soft and hard bound for time management
 
-public class MyBot : IChessBot
+public class My200TokenBot : IChessBot
 {
     // enum Flag
     // {
@@ -26,8 +26,6 @@ public class MyBot : IChessBot
 
     private int[,,] historyHeuristics;
     private readonly Move[] killers = new Move[2048];
-
-    private readonly int[] moveScores = new int[218];
 
     Board board;
     Move rootMove;
@@ -107,7 +105,6 @@ public class MyBot : IChessBot
 
         // Declare some reused variables
         bool inCheck = board.IsInCheck(),
-            canFPrune = false,
             isRoot = plyFromRoot++ == 0;
 
         // Draw detection
@@ -123,7 +120,6 @@ public class MyBot : IChessBot
             movesTried = 0,
             entryScore = entry.Item3,
             entryFlag = entry.Item5,
-            movesScored = 0,
             eval;
 
         //
@@ -159,74 +155,35 @@ public class MyBot : IChessBot
         }
         // No pruning in QSearch
         // If this node is NOT part of the PV and we're not in check
-        else if (beta - alpha == 1 && !inCheck)
+        // NULL move pruning
+        else if (beta - alpha == 1 && !inCheck && depth >= 2 && allowNull)
         {
-            // Reverse futility pruning
-            int staticEval = Evaluate();
+            board.ForceSkipTurn();
+            Search(beta, 3 + (depth >> 2), false);
+            board.UndoSkipTurn();
 
-            // Give ourselves a margin of 96 centipawns times depth.
-            // If we're up by more than that margin in material, there's no point in
-            // searching any further since our position is so good
-            if (depth <= 10 && staticEval - 96 * depth >= beta)
-                return staticEval;
-
-            // NULL move pruning
-            if (depth >= 2 && allowNull)
-            {
-                board.ForceSkipTurn();
-                Search(beta, 3 + (depth >> 2), false);
-                board.UndoSkipTurn();
-
-                // Failed high on the null move
-                if (eval >= beta)
-                    return eval;
-            }
-
-            // Extended futility pruning
-            // Can only prune when at lower depth and behind in evaluation by a large margin
-            canFPrune = depth <= 8 && staticEval + depth * 141 <= alpha;
-
-            // Razoring (reduce depth if up a significant margin at depth 3)
-            /*
-            if (depth == 3 && staticEval + 620 <= alpha)
-                depth--;
-            */
+            // Failed high on the null move
+            if (eval >= beta)
+                return eval;
         }
 
+
+
         // Generate appropriate moves depending on whether we're in QSearch
-        Span<Move> moveSpan = stackalloc Move[218];
-        board.GetLegalMovesNonAlloc(ref moveSpan, inQSearch && !inCheck);
-
-        // Order moves in reverse order -> negative values are ordered higher hence the flipped values
-        foreach (Move move in moveSpan)
-            moveScores[movesScored++] = -(
-            // Hash move
-            move == entry.Item2 ? 9_000_000 :
-            // MVVLVA
-            move.IsCapture ? 1_000_000 * (int)move.CapturePieceType - (int)move.MovePieceType :
-            // Killers
-            killers[plyFromRoot] == move ? 900_000 :
-            // History
-            historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index]);
-
-        moveScores.AsSpan(0, moveSpan.Length).Sort(moveSpan);
+        var moves = board.GetLegalMoves(inQSearch && !inCheck);
 
         // Gamestate, checkmate and draws
-        if (!inQSearch && moveSpan.IsEmpty)
-            return inCheck ? plyFromRoot -99999 : 0;
+        if (!inQSearch && moves.Length == 0)
+            return inCheck ? plyFromRoot - 99999 : 0;
 
         Move bestMove = default;
-        foreach (Move move in moveSpan)
+        foreach (Move move in moves)
         {
             // Out of time -> return checkmate so that this move is ignored
             // but better than the worst eval so a move is still picked if no moves are looked at
             // Depth check is to disallow timeouts before the bot has found a move
             if (depth > 2 && searchTimer.MillisecondsElapsedThisTurn > searchMaxTime)
                 return 99999;
-
-            // Futility pruning
-            if (canFPrune && !(movesTried == 0 || move.IsCapture || move.IsPromotion))
-                continue;
 
             board.MakeMove(move);
 
@@ -315,7 +272,7 @@ public class MyBot : IChessBot
 
     private readonly int[][] UnpackedPestoTables;
 
-    public MyBot()
+    public My200TokenBot()
     {
         // Big table packed with data from premade piece square tables
         // Access using using PackedEvaluationTables[square][pieceType] = score
@@ -352,7 +309,7 @@ public class MyBot : IChessBot
                     middlegame += UnpackedPestoTables[square][piece];
                     endgame += UnpackedPestoTables[square][piece + 6];
                 }
-                                                                                                        // Tempo bonus to help with aspiration windows
+        // Tempo bonus to help with aspiration windows
         return (middlegame * gamephase + endgame * (24 - gamephase)) / 24 * (board.IsWhiteToMove ? 1 : -1) + gamephase / 2;
     }
 

@@ -307,8 +307,6 @@ namespace ChessChallenge.Example
 
         #region Evaluation
 
-        private readonly int[] GamePhaseIncrement = { 0, 1, 1, 2, 4, 0 };
-
         // Pawn, Knight, Bishop, Rook, Queen, King 
         private readonly short[] PieceValues = { 82, 337, 365, 477, 1025, 0, // Middlegame
                                              94, 281, 297, 512, 936, 0 }; // Endgame
@@ -344,10 +342,20 @@ namespace ChessChallenge.Example
                     for (ulong mask = board.GetPieceBitboard((PieceType)piece + 1, sideToMove > 0); mask != 0;)
                     {
                         // Gamephase, middlegame -> endgame
-                        gamephase += GamePhaseIncrement[piece];
+                        // Multiply, then shift, then mask out 4 bits for value (0-16)
+                        gamephase += 0x00042110 >> piece * 4 & 0x0F;
 
                         // Material and square evaluation
                         square = BitboardHelper.ClearAndGetIndexOfLSB(ref mask) ^ 56 * sideToMove;
+
+                        // Mobility
+                        /*
+                        int mobilitySquares = BitboardHelper.GetNumberOfSetBits(
+                            BitboardHelper.GetPieceAttacks((PieceType)piece + 1, new Square(square), board, sideToMove > 0)
+                            // Exclude captures
+                            & ~board.AllPiecesBitboard);
+                        */
+
                         middlegame += UnpackedPestoTables[square][piece];
                         endgame += UnpackedPestoTables[square][piece + 6];
                     }
