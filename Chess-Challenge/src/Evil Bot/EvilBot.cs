@@ -106,8 +106,12 @@ namespace ChessChallenge.Example
 #endif
 
                     // Set up window for next search
-                    alpha = eval - 17;
-                    beta = eval + 17;
+                    // -> excluded at lower depths
+                    if (depth >= 5)
+                    {
+                        alpha = eval - 17;
+                        beta = eval + 17;
+                    }
                     depth++;
                 }
             }

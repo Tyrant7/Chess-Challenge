@@ -1,11 +1,10 @@
-﻿#define DEBUG
+﻿//#define DEBUG
 
 using ChessChallenge.API;
 using System;
 using System.Linq;
 
 // TODO: Test half move counter in eval
-// TODO: Retest aspiration window disabling below depth of 5 -----
 // TODO: Look into adding a soft and hard bound for time management
 // TODO: Look into Broxholmes' suggestion
 // TODO: Optimize PST unpacking
@@ -146,7 +145,7 @@ public class MyBot : IChessBot
 
             // Define best eval all the way up here to generate the standing pattern for QSearch
             int bestEval = -9999999,
-                originalAlpha = alpha,
+                newTTFlag = 2,
                 movesTried = 0,
                 entryScore = entry.Item3,
                 entryFlag = entry.Item5,
@@ -301,6 +300,7 @@ public class MyBot : IChessBot
                     {
                         alpha = eval;
                         bestMove = move;
+                        newTTFlag = 1;
 
                         // Update the root move
                         if (isRoot)
@@ -316,6 +316,7 @@ public class MyBot : IChessBot
                             historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index] += depth * depth;
                             killers[plyFromRoot] = move;
                         }
+                        newTTFlag = 3;
                         break;
                     }
                 }
@@ -327,7 +328,7 @@ public class MyBot : IChessBot
                 bestMove == default ? entry.Item2 : bestMove,
                 bestEval,
                 depth,
-                bestEval >= beta ? 3 : bestEval <= originalAlpha ? 2 : 1);
+                newTTFlag);
 
             return bestEval;
         }
