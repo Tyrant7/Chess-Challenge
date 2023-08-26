@@ -4,8 +4,8 @@ using ChessChallenge.API;
 using System;
 using System.Linq;
 
-// TODO: Test performance using piecevalues as integers instead of shorts
-// TODO: Retest aspiration window disabling below depth of 5
+// TODO: Test half move counter in eval
+// TODO: Retest aspiration window disabling below depth of 5 -----
 // TODO: Look into adding a soft and hard bound for time management
 // TODO: Look into Broxholmes' suggestion
 // TODO: Optimize PST unpacking
@@ -115,8 +115,12 @@ public class MyBot : IChessBot
 #endif
 
                 // Set up window for next search
-                alpha = eval - 17;
-                beta = eval + 17;
+                // -> excluded at lower depths
+                if (depth >= 5)
+                {
+                    alpha = eval - 17;
+                    beta = eval + 17;
+                }
                 depth++;
             }
         }
@@ -345,7 +349,9 @@ public class MyBot : IChessBot
                         endgame += UnpackedPestoTables[square][piece + 6];
                     }
             // Tempo bonus to help with aspiration windows
-            return (middlegame * gamephase + endgame * (24 - gamephase)) / 24 * (board.IsWhiteToMove ? 1 : -1) + gamephase / 2;
+            return (middlegame * gamephase + endgame * (24 - gamephase)) / 24 * (board.IsWhiteToMove ? 1 : -1) 
+                // + (200 - board.FiftyMoveCounter) / 200
+                + gamephase / 2;
         }
     }
 }
