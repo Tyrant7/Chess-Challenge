@@ -7,7 +7,7 @@ namespace ChessChallenge.Example
     public class EvilBot : IChessBot
     {
         // Pawn, Knight, Bishop, Rook, Queen, King 
-        private readonly short[] PieceValues = { 82, 337, 365, 477, 1025, 0, // Middlegame
+        private readonly int[] PieceValues = { 82, 337, 365, 477, 1025, 0, // Middlegame
                                              94, 281, 297, 512, 936, 0 }; // Endgame
 
         private readonly int[][] UnpackedPestoTables;
@@ -137,7 +137,7 @@ namespace ChessChallenge.Example
 
                 // Define best eval all the way up here to generate the standing pattern for QSearch
                 int bestEval = -9999999,
-                    originalAlpha = alpha,
+                    newTTFlag = 2,
                     movesTried = 0,
                     entryScore = entry.Item3,
                     entryFlag = entry.Item5,
@@ -192,7 +192,7 @@ namespace ChessChallenge.Example
                     if (depth >= 2 && allowNull)
                     {
                         board.ForceSkipTurn();
-                        Search(beta, 3 + (depth >> 2), false);
+                        Search(beta, 3 + depth / 4, false);
                         board.UndoSkipTurn();
 
                         // Failed high on the null move
@@ -292,6 +292,7 @@ namespace ChessChallenge.Example
                         {
                             alpha = eval;
                             bestMove = move;
+                            newTTFlag = 1;
 
                             // Update the root move
                             if (isRoot)
@@ -307,6 +308,7 @@ namespace ChessChallenge.Example
                                 historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index] += depth * depth;
                                 killers[plyFromRoot] = move;
                             }
+                            newTTFlag = 3;
                             break;
                         }
                     }
@@ -318,7 +320,7 @@ namespace ChessChallenge.Example
                     bestMove == default ? entry.Item2 : bestMove,
                     bestEval,
                     depth,
-                    bestEval >= beta ? 3 : bestEval <= originalAlpha ? 2 : 1);
+                    newTTFlag);
 
                 return bestEval;
             }

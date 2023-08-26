@@ -1,23 +1,19 @@
-﻿//#define DEBUG
+﻿#define DEBUG
 
 using ChessChallenge.API;
 using System;
 using System.Linq;
 
 // TODO: Test half move counter in eval
+// TODO: SPRT NMP depth coefficient of 4 and 5
 // TODO: Look into adding a soft and hard bound for time management
 // TODO: Look into Broxholmes' suggestion
 // TODO: Optimize PST unpacking
 // TODO: LMR log formula
 // TODO: LMP after new LMR reduction formula
-// TODO: Explore butterfly tables or something similar
 
 public class MyBot : IChessBot
 {
-    // Pawn, Knight, Bishop, Rook, Queen, King 
-    private readonly short[] PieceValues = { 82, 337, 365, 477, 1025, 0, // Middlegame
-                                             94, 281, 297, 512, 936, 0 }; // Endgame
-
     private readonly int[][] UnpackedPestoTables;
 
     // enum Flag
@@ -34,7 +30,12 @@ public class MyBot : IChessBot
     private readonly (ulong, Move, int, int, int)[] transpositionTable = new (ulong, Move, int, int, int)[0x400000];
 
     private readonly Move[] killers = new Move[2048];
-    private readonly int[] moveScores = new int[218];
+
+                                        // Pawn, Knight, Bishop, Rook, Queen, King 
+    private readonly int[] PieceValues = { 82, 337, 365, 477, 1025, 0, // Middlegame
+                                           94, 281, 297, 512, 936, 0 }, // Endgame
+                           moveScores = new int[218];
+
 
     private int searchMaxTime;
 
@@ -94,8 +95,8 @@ public class MyBot : IChessBot
             else if (eval >= beta)
                 beta += 62;
             else
-            {
 #if DEBUG
+            {
                 string evalWithMate = eval.ToString();
                 if (Math.Abs(eval) > 50000)
                 {
@@ -115,13 +116,14 @@ public class MyBot : IChessBot
 
                 // Set up window for next search
                 // -> excluded at lower depths
-                if (depth >= 5)
+                if (depth++ >= 5)
                 {
                     alpha = eval - 17;
                     beta = eval + 17;
                 }
-                depth++;
+#if DEBUG
             }
+#endif
         }
 
         // This method doubles as our PVS and QSearch in order to save tokens
@@ -200,7 +202,7 @@ public class MyBot : IChessBot
                 if (depth >= 2 && allowNull)
                 {
                     board.ForceSkipTurn();
-                    Search(beta, 3 + (depth >> 2), false);
+                    Search(beta, 3 + depth / 4, false);
                     board.UndoSkipTurn();
 
                     // Failed high on the null move
