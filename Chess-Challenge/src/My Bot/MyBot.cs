@@ -113,13 +113,9 @@ public class MyBot : IChessBot
                     rootMove.TargetSquare.Name);
 #endif
 
-                // Set up window for next search
-                // -> Keep infinite window at lower depths
-                if (depth > 5)
-                {
-                    alpha = eval - 17;
-                    beta = eval + 17;
-                }
+                // Setup window for next search
+                alpha = eval - 17;
+                beta = eval + 17;
                 depth++;
             }
         }
