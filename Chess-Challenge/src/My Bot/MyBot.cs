@@ -115,7 +115,7 @@ public class MyBot : IChessBot
 
                 // Set up window for next search
                 // -> Keep infinite window at lower depths
-                if (depth >= 5)
+                if (depth > 5)
                 {
                     alpha = eval - 17;
                     beta = eval + 17;
