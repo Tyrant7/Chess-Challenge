@@ -4,7 +4,8 @@ using ChessChallenge.API;
 using System;
 using System.Linq;
 
-// TODO: test performance using piecevalues as integers instead of shorts ----
+// TODO: Test performance using piecevalues as integers instead of shorts
+// TODO: Retest aspiration window disabling below depth of 5
 // TODO: Look into adding a soft and hard bound for time management
 // TODO: Look into Broxholmes' suggestion
 // TODO: Optimize PST unpacking
@@ -16,7 +17,7 @@ public class MyBot : IChessBot
 {
     // Pawn, Knight, Bishop, Rook, Queen, King 
     private readonly short[] PieceValues = { 82, 337, 365, 477, 1025, 0, // Middlegame
-                                           94, 281, 297, 512, 936, 0 }; // Endgame
+                                             94, 281, 297, 512, 936, 0 }; // Endgame
 
     private readonly int[][] UnpackedPestoTables;
 
