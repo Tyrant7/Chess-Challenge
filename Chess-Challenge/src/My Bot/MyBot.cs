@@ -1,21 +1,22 @@
-﻿//#define DEBUG
+﻿#define DEBUG
 
 using ChessChallenge.API;
 using System;
 using System.Linq;
 
-// TODO: test performance using piecevalues as integers instead of shorts
+// TODO: test performance using piecevalues as integers instead of shorts ----
 // TODO: Look into adding a soft and hard bound for time management
-// TODO: Look into Broxholmes suggestion
+// TODO: Look into Broxholmes' suggestion
 // TODO: Optimize PST unpacking
 // TODO: LMR log formula
 // TODO: LMP after new LMR reduction formula
+// TODO: Explore butterfly tables or something similar
 
 public class MyBot : IChessBot
 {
     // Pawn, Knight, Bishop, Rook, Queen, King 
     private readonly short[] PieceValues = { 82, 337, 365, 477, 1025, 0, // Middlegame
-                                             94, 281, 297, 512, 936, 0 }; // Endgame
+                                           94, 281, 297, 512, 936, 0 }; // Endgame
 
     private readonly int[][] UnpackedPestoTables;
 
@@ -113,8 +114,12 @@ public class MyBot : IChessBot
 #endif
 
                 // Set up window for next search
-                alpha = eval - 17;
-                beta = eval + 17;
+                // -> Keep infinite window at lower depths
+                if (depth >= 5)
+                {
+                    alpha = eval - 17;
+                    beta = eval + 17;
+                }
                 depth++;
             }
         }
