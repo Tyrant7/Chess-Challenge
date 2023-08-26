@@ -113,7 +113,7 @@ public class MyBot : IChessBot
                     rootMove.TargetSquare.Name);
 #endif
 
-                // Setup window for next search
+                // Set up window for next search
                 alpha = eval - 17;
                 beta = eval + 17;
                 depth++;
