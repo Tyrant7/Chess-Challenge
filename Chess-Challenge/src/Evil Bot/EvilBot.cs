@@ -6,10 +6,6 @@ namespace ChessChallenge.Example
 {
     public class EvilBot : IChessBot
     {
-        // Pawn, Knight, Bishop, Rook, Queen, King 
-        private readonly int[] PieceValues = { 82, 337, 365, 477, 1025, 0, // Middlegame
-                                             94, 281, 297, 512, 936, 0 }; // Endgame
-
         private readonly int[][] UnpackedPestoTables;
 
         // enum Flag
@@ -26,7 +22,12 @@ namespace ChessChallenge.Example
         private readonly (ulong, Move, int, int, int)[] transpositionTable = new (ulong, Move, int, int, int)[0x400000];
 
         private readonly Move[] killers = new Move[2048];
-        private readonly int[] moveScores = new int[218];
+
+        // Pawn, Knight, Bishop, Rook, Queen, King 
+        private readonly int[] PieceValues = { 82, 337, 365, 477, 1025, 0, // Middlegame
+                                           94, 281, 297, 512, 936, 0 }, // Endgame
+                               moveScores = new int[218];
+
 
         private int searchMaxTime;
 
@@ -54,18 +55,18 @@ namespace ChessChallenge.Example
         }
 
 #if DEBUG
-    long nodes;
+        long nodes;
 #endif
 
         public Move Think(Board board, Timer timer)
         {
 #if DEBUG
-        Console.WriteLine();
-        nodes = 0;
+            Console.WriteLine();
+            nodes = 0;
 #endif
 
             // Reset history tables
-            int[,,] historyHeuristics = new int[2, 7, 64];
+            var historyHeuristics = new int[2, 7, 64];
 
             // 1/30th of our remaining time, split among all of the moves
             searchMaxTime = timer.MillisecondsRemaining / 30;
@@ -86,41 +87,42 @@ namespace ChessChallenge.Example
                 else if (eval >= beta)
                     beta += 62;
                 else
-                {
 #if DEBUG
-                string evalWithMate = eval.ToString();
-                if (Math.Abs(eval) > 50000)
                 {
-                    evalWithMate = eval < 0 ? "-" : "";
-                    evalWithMate += $"M{Math.Ceiling((99998 - Math.Abs((double)eval)) / 2)}";
-                }
+                    string evalWithMate = eval.ToString();
+                    if (Math.Abs(eval) > 50000)
+                    {
+                        evalWithMate = eval < 0 ? "-" : "";
+                        evalWithMate += $"M{Math.Ceiling((99998 - Math.Abs((double)eval)) / 2)}";
+                    }
 
-                Console.WriteLine("Info: depth: {0, 2} || eval: {1, 6} || nodes: {2, 9} || nps: {3, 8} || time: {4, 5}ms || best move: {5}{6}",
-                    depth,
-                    evalWithMate,
-                    nodes,
-                    1000 * nodes / (timer.MillisecondsElapsedThisTurn + 1),
-                    timer.MillisecondsElapsedThisTurn,
-                    rootMove.StartSquare.Name,
-                    rootMove.TargetSquare.Name);
+                    Console.WriteLine("Info: depth: {0, 2} || eval: {1, 6} || nodes: {2, 9} || nps: {3, 8} || time: {4, 5}ms || best move: {5}{6}",
+                        depth,
+                        evalWithMate,
+                        nodes,
+                        1000 * nodes / (timer.MillisecondsElapsedThisTurn + 1),
+                        timer.MillisecondsElapsedThisTurn,
+                        rootMove.StartSquare.Name,
+                        rootMove.TargetSquare.Name);
 #endif
 
                     // Set up window for next search
                     // -> excluded at lower depths
-                    if (depth >= 5)
+                    if (depth++ >= 5)
                     {
                         alpha = eval - 17;
                         beta = eval + 17;
                     }
-                    depth++;
+#if DEBUG
                 }
+#endif
             }
 
             // This method doubles as our PVS and QSearch in order to save tokens
             int PVS(int depth, int alpha, int beta, int plyFromRoot, bool allowNull)
             {
 #if DEBUG
-            nodes++;
+                nodes++;
 #endif
 
                 // Declare some reused variables
@@ -134,6 +136,7 @@ namespace ChessChallenge.Example
 
                 ulong zobristKey = board.ZobristKey;
                 ref var entry = ref transpositionTable[zobristKey & 0x3FFFFF];
+                // TODO: Test this lookup instead: var (entryKey, entryMove, entryScore, entryDepth, entryFlag) = transpositionTable[zobristKey & 0x3FFFFF];
 
                 // Define best eval all the way up here to generate the standing pattern for QSearch
                 int bestEval = -9999999,
@@ -152,6 +155,7 @@ namespace ChessChallenge.Example
 
                 // Transposition table lookup -> Found a valid entry for this position
                 // Avoid retrieving mate scores from the TT since they aren't accurate to the ply
+                // TODO: Test: replace !isRoot with beta - alpha == 1 as an additional condition
                 if (entry.Item1 == zobristKey && !isRoot && entry.Item4 >= depth && Math.Abs(entryScore) < 50000 && (
                         // Exact
                         entryFlag == 1 ||
@@ -164,6 +168,11 @@ namespace ChessChallenge.Example
                 // Check extensions
                 if (inCheck)
                     depth++;
+                // Internal iterative reduction
+                /*
+                else if (entry.Item1 != zobristKey && depth > 4)
+                    depth--;
+                */
 
                 // Declare QSearch status here to prevent dropping into QSearch while in check
                 bool inQSearch = depth <= 0;
@@ -314,6 +323,15 @@ namespace ChessChallenge.Example
                     }
                 }
 
+                // Gamestate, checkmate and draws
+                // -> no moves were looked at and eval was unchanged
+                // -> must not be in QSearch and have had no moves
+                // TODO: Test
+                /*
+                if (bestEval == -9999999)
+                    return inCheck ? plyFromRoot - 99999 : 0;
+                */
+
                 // Transposition table insertion
                 entry = new(
                     zobristKey,
@@ -342,7 +360,9 @@ namespace ChessChallenge.Example
                             endgame += UnpackedPestoTables[square][piece + 6];
                         }
                 // Tempo bonus to help with aspiration windows
-                return (middlegame * gamephase + endgame * (24 - gamephase)) / 24 * (board.IsWhiteToMove ? 1 : -1) + gamephase / 2;
+                return (middlegame * gamephase + endgame * (24 - gamephase)) / (board.IsWhiteToMove ? 24 : -24)
+                    // + (200 - board.FiftyMoveCounter) / 200
+                    + gamephase / 2;
             }
         }
     }

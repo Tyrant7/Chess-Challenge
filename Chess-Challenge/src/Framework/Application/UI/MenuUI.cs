@@ -33,6 +33,10 @@ namespace ChessChallenge.Application
             {
                 controller.StartNewBotMatch(ChallengeController.PlayerType.MyBot, ChallengeController.PlayerType.TunedBotA);
             }
+            if (NextButtonInRow("Human vs CellBot", ref buttonPos, spacing, buttonSize))
+            {
+                controller.StartNewBotMatch(ChallengeController.PlayerType.Human, ChallengeController.PlayerType.CellBot);
+            }
 
             // Page buttons
             buttonPos.Y += breakSpacing;

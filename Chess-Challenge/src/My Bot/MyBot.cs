@@ -4,13 +4,12 @@ using ChessChallenge.API;
 using System;
 using System.Linq;
 
-// TODO: Test half move counter in eval
-// TODO: SPRT NMP depth coefficient of 4 and 5
 // TODO: Look into adding a soft and hard bound for time management
 // TODO: Look into Broxholmes' suggestion
-// TODO: Optimize PST unpacking
 // TODO: LMR log formula
 // TODO: LMP after new LMR reduction formula
+// TODO: Test check extensions above TT lookup
+// TODO: SPRT IIR
 
 public class MyBot : IChessBot
 {
@@ -74,7 +73,7 @@ public class MyBot : IChessBot
 #endif
 
         // Reset history tables
-        int[,,] historyHeuristics = new int[2, 7, 64];
+        var historyHeuristics = new int[2, 7, 64];
 
         // 1/30th of our remaining time, split among all of the moves
         searchMaxTime = timer.MillisecondsRemaining / 30;
@@ -144,6 +143,7 @@ public class MyBot : IChessBot
 
             ulong zobristKey = board.ZobristKey;
             ref var entry = ref transpositionTable[zobristKey & 0x3FFFFF];
+            // TODO: Test this lookup instead: var (entryKey, entryMove, entryScore, entryDepth, entryFlag) = transpositionTable[zobristKey & 0x3FFFFF];
 
             // Define best eval all the way up here to generate the standing pattern for QSearch
             int bestEval = -9999999,
@@ -162,6 +162,7 @@ public class MyBot : IChessBot
 
             // Transposition table lookup -> Found a valid entry for this position
             // Avoid retrieving mate scores from the TT since they aren't accurate to the ply
+            // TODO: Test: replace !isRoot with beta - alpha == 1 as an additional condition
             if (entry.Item1 == zobristKey && !isRoot && entry.Item4 >= depth && Math.Abs(entryScore) < 50000 && (
                     // Exact
                     entryFlag == 1 ||
@@ -174,6 +175,11 @@ public class MyBot : IChessBot
             // Check extensions
             if (inCheck)
                 depth++;
+            // Internal iterative reduction
+            /*
+            else if (entry.Item1 != zobristKey && depth > 4)
+                depth--;
+            */
 
             // Declare QSearch status here to prevent dropping into QSearch while in check
             bool inQSearch = depth <= 0;
@@ -238,10 +244,6 @@ public class MyBot : IChessBot
                 historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index]);
 
             moveScores.AsSpan(0, moveSpan.Length).Sort(moveSpan);
-
-            // Gamestate, checkmate and draws
-            if (!inQSearch && moveSpan.IsEmpty)
-                return inCheck ? plyFromRoot - 99999 : 0;
 
             Move bestMove = default;
             foreach (Move move in moveSpan)
@@ -324,6 +326,12 @@ public class MyBot : IChessBot
                 }
             }
 
+            // Gamestate, checkmate and draws
+            // -> no moves were looked at and eval was unchanged
+            // -> must not be in QSearch and have had no legal moves
+            if (bestEval == -9999999)
+                return inCheck ? plyFromRoot - 99999 : 0;
+
             // Transposition table insertion
             entry = new(
                 zobristKey,
@@ -352,7 +360,7 @@ public class MyBot : IChessBot
                         endgame += UnpackedPestoTables[square][piece + 6];
                     }
             // Tempo bonus to help with aspiration windows
-            return (middlegame * gamephase + endgame * (24 - gamephase)) / 24 * (board.IsWhiteToMove ? 1 : -1) 
+            return (middlegame * gamephase + endgame * (24 - gamephase)) / (board.IsWhiteToMove ? 24 : -24)
                 // + (200 - board.FiftyMoveCounter) / 200
                 + gamephase / 2;
         }

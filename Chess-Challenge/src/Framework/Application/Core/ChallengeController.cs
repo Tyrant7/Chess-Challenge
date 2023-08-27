@@ -22,7 +22,8 @@ namespace ChessChallenge.Application
             MyBot,
             EvilBot,
             TunedBotA,
-            TunedBotB
+            TunedBotB,
+            CellBot
         }
 
         // Game state
@@ -124,6 +125,7 @@ namespace ChessChallenge.Application
                 PlayerType.EvilBot => new EvilBot(),
                 PlayerType.TunedBotA => Tuner.NewBot(true),
                 PlayerType.TunedBotB => Tuner.NewBot(false),
+                PlayerType.CellBot => new CellBot(),
                 // If you have other bot types, you can add them here as well
                 _ => null
             };
@@ -228,6 +230,7 @@ namespace ChessChallenge.Application
                 PlayerType.EvilBot => new ChessPlayer(new EvilBot(), type, GameDurationMilliseconds),
                 PlayerType.TunedBotA => new ChessPlayer(Tuner.NewBot(true), type, GameDurationMilliseconds),
                 PlayerType.TunedBotB => new ChessPlayer(Tuner.NewBot(false), type, GameDurationMilliseconds),
+                PlayerType.CellBot => new ChessPlayer(new CellBot(), type, GameDurationMilliseconds),
                 _ => new ChessPlayer(new HumanPlayer(boardUI), type)
             };
         }
