@@ -55,14 +55,14 @@ namespace ChessChallenge.Example
         }
 
 #if DEBUG
-        long nodes;
+    long nodes;
 #endif
 
         public Move Think(Board board, Timer timer)
         {
 #if DEBUG
-            Console.WriteLine();
-            nodes = 0;
+        Console.WriteLine();
+        nodes = 0;
 #endif
 
             // Reset history tables
@@ -87,42 +87,37 @@ namespace ChessChallenge.Example
                 else if (eval >= beta)
                     beta += 62;
                 else
-#if DEBUG
                 {
-                    string evalWithMate = eval.ToString();
-                    if (Math.Abs(eval) > 50000)
-                    {
-                        evalWithMate = eval < 0 ? "-" : "";
-                        evalWithMate += $"M{Math.Ceiling((99998 - Math.Abs((double)eval)) / 2)}";
-                    }
+#if DEBUG
+                string evalWithMate = eval.ToString();
+                if (Math.Abs(eval) > 50000)
+                {
+                    evalWithMate = eval < 0 ? "-" : "";
+                    evalWithMate += $"M{Math.Ceiling((99998 - Math.Abs((double)eval)) / 2)}";
+                }
 
-                    Console.WriteLine("Info: depth: {0, 2} || eval: {1, 6} || nodes: {2, 9} || nps: {3, 8} || time: {4, 5}ms || best move: {5}{6}",
-                        depth,
-                        evalWithMate,
-                        nodes,
-                        1000 * nodes / (timer.MillisecondsElapsedThisTurn + 1),
-                        timer.MillisecondsElapsedThisTurn,
-                        rootMove.StartSquare.Name,
-                        rootMove.TargetSquare.Name);
+                Console.WriteLine("Info: depth: {0, 2} || eval: {1, 6} || nodes: {2, 9} || nps: {3, 8} || time: {4, 5}ms || best move: {5}{6}",
+                    depth,
+                    evalWithMate,
+                    nodes,
+                    1000 * nodes / (timer.MillisecondsElapsedThisTurn + 1),
+                    timer.MillisecondsElapsedThisTurn,
+                    rootMove.StartSquare.Name,
+                    rootMove.TargetSquare.Name);
 #endif
 
                     // Set up window for next search
-                    // -> excluded at lower depths
-                    if (depth++ >= 5)
-                    {
-                        alpha = eval - 17;
-                        beta = eval + 17;
-                    }
-#if DEBUG
+                    alpha = eval - 17;
+                    beta = eval + 17;
+                    depth++;
                 }
-#endif
             }
 
             // This method doubles as our PVS and QSearch in order to save tokens
             int PVS(int depth, int alpha, int beta, int plyFromRoot, bool allowNull)
             {
 #if DEBUG
-                nodes++;
+            nodes++;
 #endif
 
                 // Declare some reused variables
@@ -153,9 +148,12 @@ namespace ChessChallenge.Example
                 //
                 //
 
+                // Check extensions
+                if (inCheck)
+                    depth++;
+
                 // Transposition table lookup -> Found a valid entry for this position
                 // Avoid retrieving mate scores from the TT since they aren't accurate to the ply
-                // TODO: Test: replace !isRoot with beta - alpha == 1 as an additional condition
                 if (entry.Item1 == zobristKey && !isRoot && entry.Item4 >= depth && Math.Abs(entryScore) < 50000 && (
                         // Exact
                         entryFlag == 1 ||
@@ -164,15 +162,6 @@ namespace ChessChallenge.Example
                         // Lowerbound
                         entryFlag == 3 && entryScore >= beta))
                     return entryScore;
-
-                // Check extensions
-                if (inCheck)
-                    depth++;
-                // Internal iterative reduction
-                /*
-                else if (entry.Item1 != zobristKey && depth > 4)
-                    depth--;
-                */
 
                 // Declare QSearch status here to prevent dropping into QSearch while in check
                 bool inQSearch = depth <= 0;
@@ -237,10 +226,6 @@ namespace ChessChallenge.Example
                     historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index]);
 
                 moveScores.AsSpan(0, moveSpan.Length).Sort(moveSpan);
-
-                // Gamestate, checkmate and draws
-                if (!inQSearch && moveSpan.IsEmpty)
-                    return inCheck ? plyFromRoot - 99999 : 0;
 
                 Move bestMove = default;
                 foreach (Move move in moveSpan)
@@ -325,12 +310,9 @@ namespace ChessChallenge.Example
 
                 // Gamestate, checkmate and draws
                 // -> no moves were looked at and eval was unchanged
-                // -> must not be in QSearch and have had no moves
-                // TODO: Test
-                /*
+                // -> must not be in QSearch and have had no legal moves
                 if (bestEval == -9999999)
                     return inCheck ? plyFromRoot - 99999 : 0;
-                */
 
                 // Transposition table insertion
                 entry = new(
@@ -361,7 +343,6 @@ namespace ChessChallenge.Example
                         }
                 // Tempo bonus to help with aspiration windows
                 return (middlegame * gamephase + endgame * (24 - gamephase)) / (board.IsWhiteToMove ? 24 : -24)
-                    // + (200 - board.FiftyMoveCounter) / 200
                     + gamephase / 2;
             }
         }

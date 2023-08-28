@@ -1,15 +1,16 @@
-﻿#define DEBUG
+﻿//#define DEBUG
 
 using ChessChallenge.API;
 using System;
 using System.Linq;
 
 // TODO: Look into adding a soft and hard bound for time management
+// TODO: Retest starting ID at depth 1 (at adjust depth cap for timeout)
+// TODO: Retest depth limited AWs
 // TODO: Look into Broxholmes' suggestion
 // TODO: LMR log formula
 // TODO: LMP after new LMR reduction formula
-// TODO: Test check extensions above TT lookup
-// TODO: SPRT IIR
+// TODO: Try to token optimize using multiple assignment
 
 public class MyBot : IChessBot
 {
@@ -94,8 +95,8 @@ public class MyBot : IChessBot
             else if (eval >= beta)
                 beta += 62;
             else
-#if DEBUG
             {
+#if DEBUG
                 string evalWithMate = eval.ToString();
                 if (Math.Abs(eval) > 50000)
                 {
@@ -114,15 +115,10 @@ public class MyBot : IChessBot
 #endif
 
                 // Set up window for next search
-                // -> excluded at lower depths
-                if (depth++ >= 5)
-                {
-                    alpha = eval - 17;
-                    beta = eval + 17;
-                }
-#if DEBUG
+                alpha = eval - 17;
+                beta = eval + 17;
+                depth++;
             }
-#endif
         }
 
         // This method doubles as our PVS and QSearch in order to save tokens
@@ -160,9 +156,12 @@ public class MyBot : IChessBot
             //
             //
 
+            // Check extensions
+            if (inCheck)
+                depth++;
+
             // Transposition table lookup -> Found a valid entry for this position
             // Avoid retrieving mate scores from the TT since they aren't accurate to the ply
-            // TODO: Test: replace !isRoot with beta - alpha == 1 as an additional condition
             if (entry.Item1 == zobristKey && !isRoot && entry.Item4 >= depth && Math.Abs(entryScore) < 50000 && (
                     // Exact
                     entryFlag == 1 ||
@@ -171,15 +170,6 @@ public class MyBot : IChessBot
                     // Lowerbound
                     entryFlag == 3 && entryScore >= beta))
                 return entryScore;
-
-            // Check extensions
-            if (inCheck)
-                depth++;
-            // Internal iterative reduction
-            /*
-            else if (entry.Item1 != zobristKey && depth > 4)
-                depth--;
-            */
 
             // Declare QSearch status here to prevent dropping into QSearch while in check
             bool inQSearch = depth <= 0;
@@ -361,7 +351,6 @@ public class MyBot : IChessBot
                     }
             // Tempo bonus to help with aspiration windows
             return (middlegame * gamephase + endgame * (24 - gamephase)) / (board.IsWhiteToMove ? 24 : -24)
-                // + (200 - board.FiftyMoveCounter) / 200
                 + gamephase / 2;
         }
     }
