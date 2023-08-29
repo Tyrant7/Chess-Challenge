@@ -128,15 +128,12 @@ public class EvilBot : IChessBot
                 return 0;
 
             ulong zobristKey = board.ZobristKey;
-            ref var entry = ref transpositionTable[zobristKey & 0x3FFFFF];
-            // TODO: Test this lookup instead: var (entryKey, entryMove, entryScore, entryDepth, entryFlag) = transpositionTable[zobristKey & 0x3FFFFF];
+            var (entryKey, entryMove, entryScore, entryDepth, entryFlag) = transpositionTable[zobristKey & 0x3FFFFF];
 
             // Define best eval all the way up here to generate the standing pattern for QSearch
             int bestEval = -9999999,
                 newTTFlag = 2,
                 movesTried = 0,
-                entryScore = entry.Item3,
-                entryFlag = entry.Item5,
                 movesScored = 0,
                 eval;
 
@@ -154,7 +151,7 @@ public class EvilBot : IChessBot
 
             // Transposition table lookup -> Found a valid entry for this position
             // Avoid retrieving mate scores from the TT since they aren't accurate to the ply
-            if (entry.Item1 == zobristKey && !isRoot && entry.Item4 >= depth && Math.Abs(entryScore) < 50000 && (
+            if (entryKey == zobristKey && !isRoot && entryDepth >= depth && Math.Abs(entryScore) < 50000 && (
                     // Exact
                     entryFlag == 1 ||
                     // Upperbound
@@ -183,7 +180,6 @@ public class EvilBot : IChessBot
                 // Give ourselves a margin of 96 centipawns times depth.
                 // If we're up by more than that margin in material, there's no point in
                 // searching any further since our position is so good
-                // TODO: SPRT:                 if (depth <= 10 && staticEval - 96 * (depth - improving) >= beta)
                 if (depth <= 10 && staticEval - 96 * depth >= beta)
                     return staticEval;
 
@@ -218,7 +214,7 @@ public class EvilBot : IChessBot
             foreach (Move move in moveSpan)
                 MoveScores[movesScored++] = -(
                 // Hash move
-                move == entry.Item2 ? 9_000_000 :
+                move == entryMove ? 9_000_000 :
                 // MVVLVA
                 move.IsCapture ? 1_000_000 * (int)move.CapturePieceType - (int)move.MovePieceType :
                 // Killers
@@ -325,9 +321,9 @@ public class EvilBot : IChessBot
                 return inCheck ? plyFromRoot - 99999 : 0;
 
             // Transposition table insertion
-            entry = new(
+            transpositionTable[zobristKey & 0x3FFFFF] = (
                 zobristKey,
-                bestMove == default ? entry.Item2 : bestMove,
+                bestMove == default ? entryMove : bestMove,
                 bestEval,
                 depth,
                 newTTFlag);
