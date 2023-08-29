@@ -1,4 +1,4 @@
-﻿#define DEBUG
+﻿//#define DEBUG
 
 using ChessChallenge.API;
 using System;
@@ -270,20 +270,21 @@ public class MyBot : IChessBot
                 // TODO: Look into Tisajokt's method for LMR
 
                 // LMR + PVS
-                if (movesTried++ == 0 || inQSearch)
-                    // Always search first node with full depth
-                    Search(beta);
+                // Do a full window search if haven't tried any moves or in QSearch, 
+                if (movesTried++ == 0 || inQSearch ||
 
-                // Set eval to appropriate alpha to be read from later
-                // -> if reduction is applicable do a reduced search with a null window,
-                // othewise automatically set alpha be above the threshold
-                else if ((movesTried < 6 || depth < 2
-                        ? eval = alpha + 1
-                        : Search(alpha + 1, 1 + movesTried / 13 + depth / 9 + (notPV ? 1 : 0))) > alpha &&
+                    // Otherwise, skip reduced search if conditions are not met
+                    (movesTried < 6 || depth < 2 ||
 
-                        // If alpha was above threshold, update eval with a search with a null window
+                        // If reduction is applicable do a reduced search with a null window
+                        (Search(alpha + 1, 1 + movesTried / 13 + depth / 9 + (notPV ? 1 : 0)) > alpha)) &&
+
+                        // If alpha was above threshold after reduced search, or didn't match reduction conditions,
+                        // update eval with a search with a null window
                         alpha < Search(alpha + 1))
-                    // We raised alpha on the null window search, research with no null window
+
+                    // We either raised alpha on the null window search, or haven't search yet,
+                    // -> research with no null window
                     Search(beta);
 
                 //////////////////////////////////////////////
