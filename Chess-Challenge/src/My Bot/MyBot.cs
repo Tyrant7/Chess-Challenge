@@ -1,16 +1,18 @@
-﻿//#define DEBUG
+﻿#define DEBUG
 
 using ChessChallenge.API;
 using System;
 using System.Linq;
 
 // TODO: Look into adding a soft and hard bound for time management
-// TODO: Retest starting ID at depth 1 (at adjust depth cap for timeout)
-// TODO: Retest depth limited AWs
 // TODO: Look into Broxholmes' suggestion
 // TODO: LMR log formula
 // TODO: LMP after new LMR reduction formula
 // TODO: Try to token optimize using multiple assignment
+// TODO: Adaptive eval NMP
+// TODO: Retest bishop pair
+// TODO: Look into history based LMR
+// TODO: Test all forms of "improving" heuristic
 
 public class MyBot : IChessBot
 {
@@ -34,7 +36,8 @@ public class MyBot : IChessBot
                                         // Pawn, Knight, Bishop, Rook, Queen, King 
     private readonly int[] PieceValues = { 82, 337, 365, 477, 1025, 0, // Middlegame
                                            94, 281, 297, 512, 936, 0 }, // Endgame
-                           moveScores = new int[218];
+                           MoveScores = new int[218],
+                           Evals = new int[2048];
 
 
     private int searchMaxTime;
@@ -131,7 +134,8 @@ public class MyBot : IChessBot
             // Declare some reused variables
             bool inCheck = board.IsInCheck(),
                 canFPrune = false,
-                isRoot = plyFromRoot++ == 0;
+                isRoot = plyFromRoot++ == 0,
+                notPV = beta - alpha == 1;
 
             // Draw detection
             if (!isRoot && board.IsRepeatedPosition())
@@ -148,6 +152,7 @@ public class MyBot : IChessBot
                 entryScore = entry.Item3,
                 entryFlag = entry.Item5,
                 movesScored = 0,
+                improving = 0, 
                 eval;
 
             //
@@ -183,14 +188,21 @@ public class MyBot : IChessBot
             }
             // No pruning in QSearch
             // If this node is NOT part of the PV and we're not in check
-            else if (beta - alpha == 1 && !inCheck)
+            else if (notPV && !inCheck)
             {
-                // Reverse futility pruning
+                // Static eval
                 int staticEval = Evaluate();
 
+                // Improving
+                Evals[plyFromRoot] = staticEval;
+                if (plyFromRoot >= 2 && staticEval > Evals[plyFromRoot - 2])
+                    improving++;
+
+                // Reverse futility pruning
                 // Give ourselves a margin of 96 centipawns times depth.
                 // If we're up by more than that margin in material, there's no point in
                 // searching any further since our position is so good
+                // TODO: SPRT:                 if (depth <= 10 && staticEval - 96 * (depth - improving) >= beta)
                 if (depth <= 10 && staticEval - 96 * depth >= beta)
                     return staticEval;
 
@@ -223,7 +235,7 @@ public class MyBot : IChessBot
 
             // Order moves in reverse order -> negative values are ordered higher hence the flipped values
             foreach (Move move in moveSpan)
-                moveScores[movesScored++] = -(
+                MoveScores[movesScored++] = -(
                 // Hash move
                 move == entry.Item2 ? 9_000_000 :
                 // MVVLVA
@@ -233,7 +245,7 @@ public class MyBot : IChessBot
                 // History
                 historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index]);
 
-            moveScores.AsSpan(0, moveSpan.Length).Sort(moveSpan);
+            MoveScores.AsSpan(0, moveSpan.Length).Sort(moveSpan);
 
             Move bestMove = default;
             foreach (Move move in moveSpan)
@@ -247,6 +259,13 @@ public class MyBot : IChessBot
                 // Futility pruning
                 if (canFPrune && !(movesTried == 0 || move.IsCapture || move.IsPromotion))
                     continue;
+
+                // TODO: TEST: LMP:
+                // Late move pruning based on quiet move count
+                /*
+                if (!inCheck && beta - alpha == 1 && movesTried > 3 + depth * depth >> (1 - improving))
+                    break;
+                */
 
                 board.MakeMove(move);
 
@@ -270,7 +289,7 @@ public class MyBot : IChessBot
                 // othewise automatically set alpha be above the threshold
                 else if ((movesTried < 6 || depth < 2
                         ? eval = alpha + 1
-                        : Search(alpha + 1, 3)) > alpha &&
+                        : Search(alpha + 1, 2 + movesTried / 14 + depth / 17 + (notPV ? 1 : 0) - improving)) > alpha &&
 
                         // If alpha was above threshold, update eval with a search with a null window
                         alpha < Search(alpha + 1))
