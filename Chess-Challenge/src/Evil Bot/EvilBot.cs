@@ -2,42 +2,39 @@
 using System;
 using System.Linq;
 
-namespace ChessChallenge.Example
+public class EvilBot : IChessBot
 {
-    public class EvilBot : IChessBot
-    {
-        private readonly int[][] UnpackedPestoTables;
+    private readonly int[][] UnpackedPestoTables;
 
-        // enum Flag
-        // {
-        //     0 = Invalid,
-        //     1 = Exact,
-        //     2 = Upperbound,
-        //     3 = Lowerbound
-        // }
+    // enum Flag
+    // {
+    //     0 = Invalid,
+    //     1 = Exact,
+    //     2 = Upperbound,
+    //     3 = Lowerbound
+    // }
 
-        // 0x400000 represents the rough number of entries it would take to fill 256mb
-        // Very lowballed to make sure I don't go over
-        // Hash, Move, Score, Depth, Flag
-        private readonly (ulong, Move, int, int, int)[] transpositionTable = new (ulong, Move, int, int, int)[0x400000];
+    // 0x400000 represents the rough number of entries it would take to fill 256mb
+    // Very lowballed to make sure I don't go over
+    // Hash, Move, Score, Depth, Flag
+    private readonly (ulong, Move, int, int, int)[] transpositionTable = new (ulong, Move, int, int, int)[0x400000];
 
-        private readonly Move[] killers = new Move[2048];
+    private readonly Move[] killers = new Move[2048];
 
-        // Pawn, Knight, Bishop, Rook, Queen, King 
-        private readonly int[] PieceValues = { 82, 337, 365, 477, 1025, 0, // Middlegame
+    // Pawn, Knight, Bishop, Rook, Queen, King 
+    private readonly int[] PieceValues = { 82, 337, 365, 477, 1025, 0, // Middlegame
                                            94, 281, 297, 512, 936, 0 }, // Endgame
-                               moveScores = new int[218];
+                           MoveScores = new int[218];
 
+    private int searchMaxTime;
 
-        private int searchMaxTime;
+    Move rootMove;
 
-        Move rootMove;
-
-        public EvilBot()
-        {
-            // Big table packed with data from premade piece square tables
-            // Access using using PackedEvaluationTables[square][pieceType] = score
-            UnpackedPestoTables = new[] {
+    public EvilBot()
+    {
+        // Big table packed with data from premade piece square tables
+        // Access using using PackedEvaluationTables[square][pieceType] = score
+        UnpackedPestoTables = new[] {
             63746705523041458768562654720m, 71818693703096985528394040064m, 75532537544690978830456252672m, 75536154932036771593352371712m, 76774085526445040292133284352m, 3110608541636285947269332480m, 936945638387574698250991104m, 75531285965747665584902616832m,
             77047302762000299964198997571m, 3730792265775293618620982364m, 3121489077029470166123295018m, 3747712412930601838683035969m, 3763381335243474116535455791m, 8067176012614548496052660822m, 4977175895537975520060507415m, 2475894077091727551177487608m,
             2458978764687427073924784380m, 3718684080556872886692423941m, 4959037324412353051075877138m, 3135972447545098299460234261m, 4371494653131335197311645996m, 9624249097030609585804826662m, 9301461106541282841985626641m, 2793818196182115168911564530m,
@@ -51,43 +48,43 @@ namespace ChessChallenge.Example
                     // Using search max time since it's an integer than initializes to zero and is assgined before being used again 
                     .Select(square => (int)((sbyte)square * 1.461) + PieceValues[searchMaxTime++ % 12])
                 .ToArray()
-            ).ToArray();
-        }
+        ).ToArray();
+    }
 
 #if DEBUG
     long nodes;
 #endif
 
-        public Move Think(Board board, Timer timer)
-        {
+    public Move Think(Board board, Timer timer)
+    {
 #if DEBUG
         Console.WriteLine();
         nodes = 0;
 #endif
 
-            // Reset history tables
-            var historyHeuristics = new int[2, 7, 64];
+        // Reset history tables
+        var historyHeuristics = new int[2, 7, 64];
 
-            // 1/30th of our remaining time, split among all of the moves
-            searchMaxTime = timer.MillisecondsRemaining / 30;
+        // 1/30th of our remaining time, split among all of the moves
+        searchMaxTime = timer.MillisecondsRemaining / 30;
 
-            // Progressively increase search depth, starting from 2
-            for (int depth = 2, alpha = -999999, beta = 999999, eval; ;)
+        // Progressively increase search depth, starting from 2
+        for (int depth = 2, alpha = -999999, beta = 999999, eval; ;)
+        {
+            eval = PVS(depth, alpha, beta, 0, true);
+
+            // Out of time
+            if (timer.MillisecondsElapsedThisTurn > searchMaxTime)
+                return rootMove;
+
+            // Gradual widening
+            // Fell outside window, retry with wider window search
+            if (eval <= alpha)
+                alpha -= 62;
+            else if (eval >= beta)
+                beta += 62;
+            else
             {
-                eval = PVS(depth, alpha, beta, 0, true);
-
-                // Out of time
-                if (timer.MillisecondsElapsedThisTurn > searchMaxTime)
-                    return rootMove;
-
-                // Gradual widening
-                // Fell outside window, retry with wider window search
-                if (eval <= alpha)
-                    alpha -= 62;
-                else if (eval >= beta)
-                    beta += 62;
-                else
-                {
 #if DEBUG
                 string evalWithMate = eval.ToString();
                 if (Math.Abs(eval) > 50000)
@@ -106,245 +103,257 @@ namespace ChessChallenge.Example
                     rootMove.TargetSquare.Name);
 #endif
 
-                    // Set up window for next search
-                    alpha = eval - 17;
-                    beta = eval + 17;
-                    depth++;
-                }
+                // Set up window for next search
+                alpha = eval - 17;
+                beta = eval + 17;
+                depth++;
             }
+        }
 
-            // This method doubles as our PVS and QSearch in order to save tokens
-            int PVS(int depth, int alpha, int beta, int plyFromRoot, bool allowNull)
-            {
+        // This method doubles as our PVS and QSearch in order to save tokens
+        int PVS(int depth, int alpha, int beta, int plyFromRoot, bool allowNull)
+        {
 #if DEBUG
             nodes++;
 #endif
 
-                // Declare some reused variables
-                bool inCheck = board.IsInCheck(),
-                    canFPrune = false,
-                    isRoot = plyFromRoot++ == 0;
+            // Declare some reused variables
+            bool inCheck = board.IsInCheck(),
+                canFPrune = false,
+                isRoot = plyFromRoot++ == 0,
+                notPV = beta - alpha == 1;
 
-                // Draw detection
-                if (!isRoot && board.IsRepeatedPosition())
-                    return 0;
+            // Draw detection
+            if (!isRoot && board.IsRepeatedPosition())
+                return 0;
 
-                ulong zobristKey = board.ZobristKey;
-                ref var entry = ref transpositionTable[zobristKey & 0x3FFFFF];
-                // TODO: Test this lookup instead: var (entryKey, entryMove, entryScore, entryDepth, entryFlag) = transpositionTable[zobristKey & 0x3FFFFF];
+            ulong zobristKey = board.ZobristKey;
+            ref var entry = ref transpositionTable[zobristKey & 0x3FFFFF];
+            // TODO: Test this lookup instead: var (entryKey, entryMove, entryScore, entryDepth, entryFlag) = transpositionTable[zobristKey & 0x3FFFFF];
 
-                // Define best eval all the way up here to generate the standing pattern for QSearch
-                int bestEval = -9999999,
-                    newTTFlag = 2,
-                    movesTried = 0,
-                    entryScore = entry.Item3,
-                    entryFlag = entry.Item5,
-                    movesScored = 0,
-                    eval;
+            // Define best eval all the way up here to generate the standing pattern for QSearch
+            int bestEval = -9999999,
+                newTTFlag = 2,
+                movesTried = 0,
+                entryScore = entry.Item3,
+                entryFlag = entry.Item5,
+                movesScored = 0,
+                eval;
 
-                //
-                // Evil local method to save tokens for similar calls to PVS (set eval inside search)
-                int Search(int newAlpha, int R = 1, bool canNull = true) => eval = -PVS(depth - R, -newAlpha, -alpha, plyFromRoot, canNull);
-                //
-                //
+            //
+            // Evil local method to save tokens for similar calls to PVS (set eval inside search)
+            int Search(int newAlpha, int R = 1, bool canNull = true) => eval = -PVS(depth - R, -newAlpha, -alpha, plyFromRoot, canNull);
+            //
+            //
 
-                // Check extensions
-                if (inCheck)
-                    depth++;
+            // Check extensions
+            if (inCheck)
+                depth++;
 
-                // Transposition table lookup -> Found a valid entry for this position
-                // Avoid retrieving mate scores from the TT since they aren't accurate to the ply
-                if (entry.Item1 == zobristKey && !isRoot && entry.Item4 >= depth && Math.Abs(entryScore) < 50000 && (
-                        // Exact
-                        entryFlag == 1 ||
-                        // Upperbound
-                        entryFlag == 2 && entryScore <= alpha ||
-                        // Lowerbound
-                        entryFlag == 3 && entryScore >= beta))
-                    return entryScore;
+            // TODO: Look into Broxholmes' suggestion
 
-                // Declare QSearch status here to prevent dropping into QSearch while in check
-                bool inQSearch = depth <= 0;
-                if (inQSearch)
-                {
-                    // Determine if quiescence search should be continued
-                    bestEval = Evaluate();
-                    if (bestEval >= beta)
-                        return bestEval;
-                    alpha = Math.Max(alpha, bestEval);
-                }
-                // No pruning in QSearch
-                // If this node is NOT part of the PV and we're not in check
-                else if (beta - alpha == 1 && !inCheck)
-                {
-                    // Reverse futility pruning
-                    int staticEval = Evaluate();
+            // Transposition table lookup -> Found a valid entry for this position
+            // Avoid retrieving mate scores from the TT since they aren't accurate to the ply
+            if (entry.Item1 == zobristKey && !isRoot && entry.Item4 >= depth && Math.Abs(entryScore) < 50000 && (
+                    // Exact
+                    entryFlag == 1 ||
+                    // Upperbound
+                    entryFlag == 2 && entryScore <= alpha ||
+                    // Lowerbound
+                    entryFlag == 3 && entryScore >= beta))
+                return entryScore;
 
-                    // Give ourselves a margin of 96 centipawns times depth.
-                    // If we're up by more than that margin in material, there's no point in
-                    // searching any further since our position is so good
-                    if (depth <= 10 && staticEval - 96 * depth >= beta)
-                        return staticEval;
-
-                    // NULL move pruning
-                    if (depth >= 2 && allowNull)
-                    {
-                        board.ForceSkipTurn();
-                        Search(beta, 3 + depth / 4, false);
-                        board.UndoSkipTurn();
-
-                        // Failed high on the null move
-                        if (eval >= beta)
-                            return eval;
-                    }
-
-                    // Extended futility pruning
-                    // Can only prune when at lower depth and behind in evaluation by a large margin
-                    canFPrune = depth <= 8 && staticEval + depth * 141 <= alpha;
-
-                    // Razoring (reduce depth if up a significant margin at depth 3)
-                    /*
-                    if (depth == 3 && staticEval + 620 <= alpha)
-                        depth--;
-                    */
-                }
-
-                // Generate appropriate moves depending on whether we're in QSearch
-                Span<Move> moveSpan = stackalloc Move[218];
-                board.GetLegalMovesNonAlloc(ref moveSpan, inQSearch && !inCheck);
-
-                // Order moves in reverse order -> negative values are ordered higher hence the flipped values
-                foreach (Move move in moveSpan)
-                    moveScores[movesScored++] = -(
-                    // Hash move
-                    move == entry.Item2 ? 9_000_000 :
-                    // MVVLVA
-                    move.IsCapture ? 1_000_000 * (int)move.CapturePieceType - (int)move.MovePieceType :
-                    // Killers
-                    killers[plyFromRoot] == move ? 900_000 :
-                    // History
-                    historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index]);
-
-                moveScores.AsSpan(0, moveSpan.Length).Sort(moveSpan);
-
-                Move bestMove = default;
-                foreach (Move move in moveSpan)
-                {
-                    // Out of time -> return checkmate so that this move is ignored
-                    // but better than the worst eval so a move is still picked if no moves are looked at
-                    // Depth check is to disallow timeouts before the bot has found a move
-                    if (depth > 2 && timer.MillisecondsElapsedThisTurn > searchMaxTime)
-                        return 99999;
-
-                    // Futility pruning
-                    if (canFPrune && !(movesTried == 0 || move.IsCapture || move.IsPromotion))
-                        continue;
-
-                    board.MakeMove(move);
-
-                    //////////////////////////////////////////////////////
-                    ////                                              ////
-                    ////                                              ////
-                    ////     [You're about to see some terrible]      ////
-                    //// [disgusting syntax that saves a few tokens]  ////
-                    ////                                              ////
-                    ////                                              ////
-                    ////                                              ////
-                    //////////////////////////////////////////////////////
-
-                    // LMR + PVS
-                    if (movesTried++ == 0 || inQSearch)
-                        // Always search first node with full depth
-                        Search(beta);
-
-                    // Set eval to appropriate alpha to be read from later
-                    // -> if reduction is applicable do a reduced search with a null window,
-                    // othewise automatically set alpha be above the threshold
-                    else if ((movesTried < 6 || depth < 2
-                            ? eval = alpha + 1
-                            : Search(alpha + 1, 3)) > alpha &&
-
-                            // If alpha was above threshold, update eval with a search with a null window
-                            alpha < Search(alpha + 1))
-                        // We raised alpha on the null window search, research with no null window
-                        Search(beta);
-
-                    //////////////////////////////////////////////
-                    ////                                      ////
-                    ////       [~ Exiting syntax hell ~]      ////
-                    ////           [Or so you think]          ////
-                    ////                                      ////
-                    ////                                      ////
-                    //////////////////////////////////////////////
-
-                    board.UndoMove(move);
-
-                    if (eval > bestEval)
-                    {
-                        bestEval = eval;
-                        if (eval > alpha)
-                        {
-                            alpha = eval;
-                            bestMove = move;
-                            newTTFlag = 1;
-
-                            // Update the root move
-                            if (isRoot)
-                                rootMove = move;
-                        }
-
-                        // Cutoff
-                        if (alpha >= beta)
-                        {
-                            // Update history tables
-                            if (!move.IsCapture)
-                            {
-                                historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index] += depth * depth;
-                                killers[plyFromRoot] = move;
-                            }
-                            newTTFlag = 3;
-                            break;
-                        }
-                    }
-                }
-
-                // Gamestate, checkmate and draws
-                // -> no moves were looked at and eval was unchanged
-                // -> must not be in QSearch and have had no legal moves
-                if (bestEval == -9999999)
-                    return inCheck ? plyFromRoot - 99999 : 0;
-
-                // Transposition table insertion
-                entry = new(
-                    zobristKey,
-                    bestMove == default ? entry.Item2 : bestMove,
-                    bestEval,
-                    depth,
-                    newTTFlag);
-
-                return bestEval;
-            }
-
-            int Evaluate()
+            // Declare QSearch status here to prevent dropping into QSearch while in check
+            bool inQSearch = depth <= 0;
+            if (inQSearch)
             {
-                int middlegame = 0, endgame = 0, gamephase = 0, sideToMove = 2, piece, square;
-                for (; --sideToMove >= 0; middlegame = -middlegame, endgame = -endgame)
-                    for (piece = -1; ++piece < 6;)
-                        for (ulong mask = board.GetPieceBitboard((PieceType)piece + 1, sideToMove > 0); mask != 0;)
-                        {
-                            // Gamephase, middlegame -> endgame
-                            // Multiply, then shift, then mask out 4 bits for value (0-16)
-                            gamephase += 0x00042110 >> piece * 4 & 0x0F;
-
-                            // Material and square evaluation
-                            square = BitboardHelper.ClearAndGetIndexOfLSB(ref mask) ^ 56 * sideToMove;
-                            middlegame += UnpackedPestoTables[square][piece];
-                            endgame += UnpackedPestoTables[square][piece + 6];
-                        }
-                // Tempo bonus to help with aspiration windows
-                return (middlegame * gamephase + endgame * (24 - gamephase)) / (board.IsWhiteToMove ? 24 : -24)
-                    + gamephase / 2;
+                // Determine if quiescence search should be continued
+                bestEval = Evaluate();
+                if (bestEval >= beta)
+                    return bestEval;
+                alpha = Math.Max(alpha, bestEval);
             }
+            // No pruning in QSearch
+            // If this node is NOT part of the PV and we're not in check
+            else if (notPV && !inCheck)
+            {
+                // Reverse futility pruning
+                int staticEval = Evaluate();
+
+                // Give ourselves a margin of 96 centipawns times depth.
+                // If we're up by more than that margin in material, there's no point in
+                // searching any further since our position is so good
+                // TODO: SPRT:                 if (depth <= 10 && staticEval - 96 * (depth - improving) >= beta)
+                if (depth <= 10 && staticEval - 96 * depth >= beta)
+                    return staticEval;
+
+                // NULL move pruning
+                if (depth >= 2 && allowNull)
+                {
+                    board.ForceSkipTurn();
+                    Search(beta, 3 + depth / 4, false);
+                    board.UndoSkipTurn();
+
+                    // Failed high on the null move
+                    if (eval >= beta)
+                        return eval;
+                }
+
+                // Extended futility pruning
+                // Can only prune when at lower depth and behind in evaluation by a large margin
+                canFPrune = depth <= 8 && staticEval + depth * 141 <= alpha;
+
+                // Razoring (reduce depth if up a significant margin at depth 3)
+                /*
+                if (depth == 3 && staticEval + 620 <= alpha)
+                    depth--;
+                */
+            }
+
+            // Generate appropriate moves depending on whether we're in QSearch
+            Span<Move> moveSpan = stackalloc Move[218];
+            board.GetLegalMovesNonAlloc(ref moveSpan, inQSearch && !inCheck);
+
+            // Order moves in reverse order -> negative values are ordered higher hence the flipped values
+            foreach (Move move in moveSpan)
+                MoveScores[movesScored++] = -(
+                // Hash move
+                move == entry.Item2 ? 9_000_000 :
+                // MVVLVA
+                move.IsCapture ? 1_000_000 * (int)move.CapturePieceType - (int)move.MovePieceType :
+                // Killers
+                killers[plyFromRoot] == move ? 900_000 :
+                // History
+                historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index]);
+
+            MoveScores.AsSpan(0, moveSpan.Length).Sort(moveSpan);
+
+            Move bestMove = default;
+            foreach (Move move in moveSpan)
+            {
+                // Out of time -> return checkmate so that this move is ignored
+                // but better than the worst eval so a move is still picked if no moves are looked at
+                // Depth check is to disallow timeouts before the bot has found a move
+                if (depth > 2 && timer.MillisecondsElapsedThisTurn > searchMaxTime)
+                    return 99999;
+
+                // Futility pruning
+                if (canFPrune && !(movesTried == 0 || move.IsCapture || move.IsPromotion))
+                    continue;
+
+                // TODO: TEST: LMP:
+                // Late move pruning based on quiet move count
+                /*
+                if (!inCheck && beta - alpha == 1 && movesTried > 3 + depth * depth >> (1 - improving))
+                    break;
+                */
+
+                board.MakeMove(move);
+
+                //////////////////////////////////////////////////////
+                ////                                              ////
+                ////                                              ////
+                ////     [You're about to see some terrible]      ////
+                //// [disgusting syntax that saves a few tokens]  ////
+                ////                                              ////
+                ////                                              ////
+                ////                                              ////
+                //////////////////////////////////////////////////////
+
+                // TODO: Look into Tisajokt's method for LMR
+
+                // LMR + PVS
+                if (movesTried++ == 0 || inQSearch)
+                    // Always search first node with full depth
+                    Search(beta);
+
+                // Set eval to appropriate alpha to be read from later
+                // -> if reduction is applicable do a reduced search with a null window,
+                // othewise automatically set alpha be above the threshold
+                else if ((movesTried < 6 || depth < 2
+                        ? eval = alpha + 1
+                        : Search(alpha + 1, 1 + movesTried / 13 + depth / 9 + (notPV ? 1 : 0))) > alpha &&
+
+                        // If alpha was above threshold, update eval with a search with a null window
+                        alpha < Search(alpha + 1))
+                    // We raised alpha on the null window search, research with no null window
+                    Search(beta);
+
+                //////////////////////////////////////////////
+                ////                                      ////
+                ////       [~ Exiting syntax hell ~]      ////
+                ////           [Or so you think]          ////
+                ////                                      ////
+                ////                                      ////
+                //////////////////////////////////////////////
+
+                board.UndoMove(move);
+
+                if (eval > bestEval)
+                {
+                    bestEval = eval;
+                    if (eval > alpha)
+                    {
+                        alpha = eval;
+                        bestMove = move;
+                        newTTFlag = 1;
+
+                        // Update the root move
+                        if (isRoot)
+                            rootMove = move;
+                    }
+
+                    // Cutoff
+                    if (alpha >= beta)
+                    {
+                        // Update history tables
+                        if (!move.IsCapture)
+                        {
+                            historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index] += depth * depth;
+                            killers[plyFromRoot] = move;
+                        }
+                        newTTFlag = 3;
+                        break;
+                    }
+                }
+            }
+
+            // Gamestate, checkmate and draws
+            // -> no moves were looked at and eval was unchanged
+            // -> must not be in QSearch and have had no legal moves
+            if (bestEval == -9999999)
+                return inCheck ? plyFromRoot - 99999 : 0;
+
+            // Transposition table insertion
+            entry = new(
+                zobristKey,
+                bestMove == default ? entry.Item2 : bestMove,
+                bestEval,
+                depth,
+                newTTFlag);
+
+            return bestEval;
+        }
+
+        int Evaluate()
+        {
+            int middlegame = 0, endgame = 0, gamephase = 0, sideToMove = 2, piece, square;
+            for (; --sideToMove >= 0; middlegame = -middlegame, endgame = -endgame)
+                for (piece = -1; ++piece < 6;)
+                    for (ulong mask = board.GetPieceBitboard((PieceType)piece + 1, sideToMove > 0); mask != 0;)
+                    {
+                        // Gamephase, middlegame -> endgame
+                        // Multiply, then shift, then mask out 4 bits for value (0-16)
+                        gamephase += 0x00042110 >> piece * 4 & 0x0F;
+
+                        // Material and square evaluation
+                        square = BitboardHelper.ClearAndGetIndexOfLSB(ref mask) ^ 56 * sideToMove;
+                        middlegame += UnpackedPestoTables[square][piece];
+                        endgame += UnpackedPestoTables[square][piece + 6];
+                    }
+            // Tempo bonus to help with aspiration windows
+            return (middlegame * gamephase + endgame * (24 - gamephase)) / (board.IsWhiteToMove ? 24 : -24)
+                + gamephase / 2;
         }
     }
 }
