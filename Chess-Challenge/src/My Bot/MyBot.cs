@@ -1,18 +1,16 @@
-﻿#define DEBUG
+﻿//#define DEBUG
 
 using ChessChallenge.API;
 using System;
 using System.Linq;
 
 // TODO: Look into adding a soft and hard bound for time management
-// TODO: Look into Broxholmes' suggestion
-// TODO: LMR log formula
-// TODO: LMP after new LMR reduction formula
+// TODO: LMR better formula
+// TODO: LMP
 // TODO: Try to token optimize using multiple assignment
 // TODO: Adaptive eval NMP
 // TODO: Retest bishop pair
-// TODO: Look into history based LMR
-// TODO: Test all forms of "improving" heuristic
+// TODO: Delta pruning as seen in 4ku
 
 public class MyBot : IChessBot
 {
@@ -33,12 +31,10 @@ public class MyBot : IChessBot
 
     private readonly Move[] killers = new Move[2048];
 
-                                        // Pawn, Knight, Bishop, Rook, Queen, King 
+    // Pawn, Knight, Bishop, Rook, Queen, King 
     private readonly int[] PieceValues = { 82, 337, 365, 477, 1025, 0, // Middlegame
                                            94, 281, 297, 512, 936, 0 }, // Endgame
-                           MoveScores = new int[218],
-                           Evals = new int[2048];
-
+                           MoveScores = new int[218];
 
     private int searchMaxTime;
 
@@ -152,7 +148,6 @@ public class MyBot : IChessBot
                 entryScore = entry.Item3,
                 entryFlag = entry.Item5,
                 movesScored = 0,
-                improving = 0, 
                 eval;
 
             //
@@ -164,6 +159,8 @@ public class MyBot : IChessBot
             // Check extensions
             if (inCheck)
                 depth++;
+
+            // TODO: Look into Broxholmes' suggestion
 
             // Transposition table lookup -> Found a valid entry for this position
             // Avoid retrieving mate scores from the TT since they aren't accurate to the ply
@@ -190,15 +187,9 @@ public class MyBot : IChessBot
             // If this node is NOT part of the PV and we're not in check
             else if (notPV && !inCheck)
             {
-                // Static eval
+                // Reverse futility pruning
                 int staticEval = Evaluate();
 
-                // Improving
-                Evals[plyFromRoot] = staticEval;
-                if (plyFromRoot >= 2 && staticEval > Evals[plyFromRoot - 2])
-                    improving++;
-
-                // Reverse futility pruning
                 // Give ourselves a margin of 96 centipawns times depth.
                 // If we're up by more than that margin in material, there's no point in
                 // searching any further since our position is so good
@@ -279,6 +270,8 @@ public class MyBot : IChessBot
                 ////                                              ////
                 //////////////////////////////////////////////////////
 
+                // TODO: Look into Tisajokt's method for LMR
+
                 // LMR + PVS
                 if (movesTried++ == 0 || inQSearch)
                     // Always search first node with full depth
@@ -289,7 +282,7 @@ public class MyBot : IChessBot
                 // othewise automatically set alpha be above the threshold
                 else if ((movesTried < 6 || depth < 2
                         ? eval = alpha + 1
-                        : Search(alpha + 1, 2 + movesTried / 14 + depth / 17 + (notPV ? 1 : 0) - improving)) > alpha &&
+                        : Search(alpha + 1, 1 + movesTried / 13 + depth / 9 + (notPV ? 1 : 0))) > alpha &&
 
                         // If alpha was above threshold, update eval with a search with a null window
                         alpha < Search(alpha + 1))
