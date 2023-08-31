@@ -355,6 +355,13 @@ public class MyBot : IChessBot
                         square = BitboardHelper.ClearAndGetIndexOfLSB(ref mask) ^ 56 * sideToMove;
                         middlegame += UnpackedPestoTables[square][piece];
                         endgame += UnpackedPestoTables[square][piece + 6];
+
+                        // Bishop pair bonus
+                        if (piece == 2 && mask != 0)
+                        {
+                            middlegame += 22;
+                            endgame += 18;
+                        }
                     }
             // Tempo bonus to help with aspiration windows
             return (middlegame * gamephase + endgame * (24 - gamephase)) / (board.IsWhiteToMove ? 24 : -24)
