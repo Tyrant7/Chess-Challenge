@@ -31,7 +31,7 @@ namespace ChessChallenge.Application
             }
             if (NextButtonInRow("MyBot vs TunedBot", ref buttonPos, spacing, buttonSize))
             {
-                controller.StartNewBotMatch(ChallengeController.PlayerType.MyBot, ChallengeController.PlayerType.TunedBotA);
+                controller.StartNewBotMatch(ChallengeController.PlayerType.MyBot, ChallengeController.PlayerType.TunedBot);
             }
             if (NextButtonInRow("Human vs CellBot", ref buttonPos, spacing, buttonSize))
             {

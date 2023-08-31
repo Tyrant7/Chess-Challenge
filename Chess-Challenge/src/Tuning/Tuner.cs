@@ -12,6 +12,8 @@ namespace Chess_Challenge.src.Tuning
 {
     static internal class Tuner
     {
+        public static int GlobalID = 0;
+
         static private JsonSerializerOptions Options => new()
         {
             WriteIndented = true,
@@ -21,14 +23,14 @@ namespace Chess_Challenge.src.Tuning
         private static readonly string EvalFileName = "Evaluation.weights";
 
         // Change file path to your engine's build directory
-        private static readonly string BuildDirectory = "D:\\Users\\tyler\\Chess-Challenge\\Chess-Challenge\\bin\\Debug\\net6.0";
+        private static readonly string BuildDirectory = "D:\\Users\\tyler\\Chess-Challenge\\Chess-Challenge\\bin\\Release\\net6.0";
 
-        private static string FilePathA => Path.Combine(BuildDirectory, "A-" + EvalFileName);
-        private static string FilePathB => Path.Combine(BuildDirectory, "B-" + EvalFileName);
+        private static string MyWeightsPath
+            => Path.Combine(BuildDirectory, GlobalID.ToString() + "-" + EvalFileName);
 
-        public static TunedBot NewBot(bool isA)
+        public static TunedBot NewBot()
         {
-            return new TunedBot(ParamsFromFile(isA ? FilePathA : FilePathB));
+            return new TunedBot(ParamsFromFile(MyWeightsPath));
         }
 
         private static RawParameters ParamsFromFile(string path)

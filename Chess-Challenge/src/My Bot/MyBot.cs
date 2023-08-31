@@ -8,7 +8,7 @@ using System.Linq;
 // TODO: Tune (again)
 // TODO: LMP
 // TODO: Try to token optimize using multiple assignment
-// TODO: Adaptive eval NMP
+// TODO: Adaptive eval NMP (look at Tisajokt's example)
 // TODO: Retest bishop pair
 // TODO: Delta pruning as seen in 4ku
 // TODO: Move assignment of unpacked pesto tables outside of array
@@ -267,10 +267,8 @@ public class MyBot : IChessBot
                 ////                                              ////
                 //////////////////////////////////////////////////////
 
-                // TODO: Look into Tisajokt's method for LMR
-
                 // LMR + PVS
-                // Do a full window search if haven't tried any moves or in QSearch, 
+                // Do a full window search if haven't tried any moves or in QSearch
                 if (movesTried++ == 0 || inQSearch ||
 
                     // Otherwise, skip reduced search if conditions are not met

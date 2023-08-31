@@ -1,9 +1,11 @@
-﻿using ChessChallenge.API;
+﻿using Chess_Challenge.src.Tuning;
+using ChessChallenge.API;
 using ChessChallenge.UCI;
 using Raylib_cs;
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Numerics;
 using System.Runtime.InteropServices;
 
@@ -21,7 +23,7 @@ namespace ChessChallenge.Application
             {
                 string argstr = args[0].Substring(args[0].IndexOf("uci"));
                 string[] ccArgs = argstr.Split(" ");
-                if (ccArgs.Length == 2 && ccArgs[0] == "uci")
+                if (ccArgs.Length >= 2 && ccArgs[0] == "uci")
                 {
                     Console.WriteLine("Starting up in UCI mode...");
                     StartUCI(ccArgs);
@@ -136,8 +138,14 @@ namespace ChessChallenge.Application
         private static void StartUCI(string[] args)
         {
             ChallengeController.PlayerType player;
-            bool success = Enum.TryParse(args[1], out player);
 
+            if (args.Length >= 4 && args[2] == "tune")
+            {
+                if (int.TryParse(args[3], out int tunerID))
+                    Tuner.GlobalID = tunerID;
+            }
+
+            bool success = Enum.TryParse(args[1], out player);
             if (!success)
             {
                 Console.Error.WriteLine($"Failed to start bot with player type {args[1]}");
