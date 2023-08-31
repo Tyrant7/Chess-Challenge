@@ -184,10 +184,10 @@ public class EvilBot : IChessBot
                     return staticEval;
 
                 // NULL move pruning
-                if (depth >= 2 && allowNull)
+                if (depth >= 2 && staticEval >= beta && allowNull)
                 {
                     board.ForceSkipTurn();
-                    Search(beta, 3 + depth / 4, false);
+                    Search(beta, 3 + depth / 4 + Math.Min(6, (staticEval - beta) / 175), false);
                     board.UndoSkipTurn();
 
                     // Failed high on the null move

@@ -8,10 +8,9 @@ using System.Linq;
 // TODO: Tune (again)
 // TODO: LMP
 // TODO: Try to token optimize using multiple assignment
-// TODO: Adaptive eval NMP (look at Tisajokt's example)
 // TODO: Retest bishop pair
 // TODO: Delta pruning as seen in 4ku
-// TODO: Move assignment of unpacked pesto tables outside of array
+// TODO: Move the assignment of unpacked pesto tables outside of array
 
 public class MyBot : IChessBot
 {
@@ -195,10 +194,10 @@ public class MyBot : IChessBot
                     return staticEval;
 
                 // NULL move pruning
-                if (depth >= 2 && allowNull)
+                if (depth >= 2 && staticEval >= beta && allowNull)
                 {
                     board.ForceSkipTurn();
-                    Search(beta, 3 + depth / 4, false);
+                    Search(beta, 3 + depth / 4 + Math.Min(6, (staticEval - beta) / 175), false);
                     board.UndoSkipTurn();
 
                     // Failed high on the null move

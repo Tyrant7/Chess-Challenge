@@ -194,10 +194,14 @@ namespace Chess_Challenge.src.Tuning
                         return staticEval;
 
                     // NULL move pruning
-                    if (depth >= p.Parameters["NMPDepthMargin"] && allowNull)
+                    if (depth >= p.Parameters["NMPDepthMargin"] && staticEval >= beta && allowNull)
                     {
                         board.ForceSkipTurn();
-                        Search(beta, p.Parameters["NMP_R"] + depth / p.Parameters["NMPDepthCoef"], false);
+
+                        // TODO: Give parameter for the divisor (/ 175)
+                        Search(beta, p.Parameters["NMP_R"] + depth / p.Parameters["NMPDepthCoef"]
+                            + Math.Min(6, (staticEval - beta) / 175), false);
+                        Search(beta, 3 + depth / 4, false);
                         board.UndoSkipTurn();
 
                         // Failed high on the null move
