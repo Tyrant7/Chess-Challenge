@@ -249,4 +249,20 @@ public class PieceTableGenerator
             Console.WriteLine();
         }
     }
+
+    private static void PrintOriginalData(int[][] table)
+    {
+        for (int type = 0; type < tableCount; type++)
+        {
+            Console.WriteLine("\n\nTable for type: " + (ScoreType)type);
+            for (int square = 0; square < tableSize; square++)
+            {
+                if (square % 8 == 0)
+                    Console.WriteLine();
+
+                Console.Write($"{table[type][square],4}, ");
+            }
+            Console.WriteLine();
+        }
+    }
 }
