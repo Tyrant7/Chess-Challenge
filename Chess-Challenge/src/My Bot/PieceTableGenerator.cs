@@ -168,7 +168,7 @@ public class PieceTableGenerator
         Console.WriteLine("Packed table:\n");
         decimal[] packedData = PackData(table);
 
-        Console.Write(packedData);
+        PrintPackedData(packedData);
 
         Console.WriteLine("Unpacked table:\n");
         int[][] unpackedData = UnpackData(packedData);
@@ -205,16 +205,6 @@ public class PieceTableGenerator
             packedData[square] = new(thirds);
         }
 
-        // Print the newly created table
-        Console.Write("{ ");
-        for (int square = 0; square < tableSize; square++)
-        {
-            if (square % 8 == 0)
-                Console.WriteLine();
-            Console.Write(packedData[square] + "m, ");
-        }
-        Console.WriteLine("\n};");
-
         return packedData;
     }
 
@@ -231,6 +221,18 @@ public class PieceTableGenerator
         }).ToArray();
 
         return pestoUnpacked;
+    }
+
+    private static void PrintPackedData(decimal[] packedData)
+    {
+        Console.Write("{ ");
+        for (int square = 0; square < tableSize; square++)
+        {
+            if (square % 8 == 0)
+                Console.WriteLine();
+            Console.Write(packedData[square] + "m, ");
+        }
+        Console.WriteLine("\n};");
     }
 
     private static void PrintUnpackedData(int[][] unpackedData, short[]? pieceValues = null)
