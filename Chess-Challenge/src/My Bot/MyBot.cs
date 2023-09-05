@@ -1,4 +1,4 @@
-﻿//#define DEBUG
+﻿#define DEBUG
 
 using ChessChallenge.API;
 using System;
@@ -8,10 +8,9 @@ using System.Linq;
 // TODO: Play with values for dynamic NMP
 // TODO: LMP
 // TODO: Try to token optimize using multiple assignment
+// TODO: Move the assignment of unpacked pesto tables outside of constructor
 // TODO: Try history based LMR
 // TODO: SPRT the beta check for PVS before full search
-// TODO: Retest tempo bonus
-// TODO: Test Damnian's unpacking method
 
 public class MyBot : IChessBot
 {
@@ -157,12 +156,12 @@ public class MyBot : IChessBot
             // Check extensions
             if (inCheck)
                 depth++;
-            // Internal iterative reduction
-            // TODO: SPRT
+            // TODO: Test
             /*
-            else if (!notPV && entryKey != zobristKey && depth > 6)
+            else if (entryKey != zobristKey && depth > 3 && !notPV)
                 depth--;
             */
+
 
             // TODO: Look into Broxholmes' suggestion
 
@@ -178,9 +177,7 @@ public class MyBot : IChessBot
                 return entryScore;
 
             // Declare QSearch status here to prevent dropping into QSearch while in check
-            bool inQSearch = depth <= 0,
-                 onlyCaptures = inQSearch && !inCheck;
-
+            bool inQSearch = depth <= 0;
             if (inQSearch)
             {
                 // Determine if quiescence search should be continued
@@ -227,13 +224,7 @@ public class MyBot : IChessBot
 
             // Generate appropriate moves depending on whether we're in QSearch
             Span<Move> moveSpan = stackalloc Move[218];
-            board.GetLegalMovesNonAlloc(ref moveSpan, onlyCaptures);
-
-            // Gamestate, checkmate and draws
-            // -> if we have no legal moves and aren't only checking captures,
-            // we can return before sorting moves to save time
-            if (moveSpan.IsEmpty && !onlyCaptures)
-                return inCheck ? plyFromRoot - 99999 : 0;
+            board.GetLegalMovesNonAlloc(ref moveSpan, inQSearch && !inCheck);
 
             // Order moves in reverse order -> negative values are ordered higher hence the flipped values
             foreach (Move move in moveSpan)
@@ -266,7 +257,7 @@ public class MyBot : IChessBot
                 // TODO: TEST: LMP:
                 // Late move pruning based on quiet move count
                 /*
-                if (!inCheck && notPV && movesTried > 3 + depth * depth)
+                if (!inCheck && beta - alpha == 1 && movesTried > 3 + depth * depth >> (1 - improving))
                     break;
                 */
 
@@ -339,6 +330,12 @@ public class MyBot : IChessBot
                 }
             }
 
+            // Gamestate, checkmate and draws
+            // -> no moves were looked at and eval was unchanged
+            // -> must not be in QSearch and have had no legal moves
+            if (bestEval == -9999999)
+                return inCheck ? plyFromRoot - 99999 : 0;
+
             // Transposition table insertion
             transpositionTable[zobristKey & 0x3FFFFF] = (
                 zobristKey,
@@ -387,7 +384,7 @@ public class MyBot : IChessBot
                         */
                     }
             return (middlegame * gamephase + endgame * (24 - gamephase)) / (board.IsWhiteToMove ? 24 : -24)
-                // Tempo bonus to help with aspiration windows
+            // Tempo bonus to help with aspiration windows
                 + gamephase / 2;
         }
     }
