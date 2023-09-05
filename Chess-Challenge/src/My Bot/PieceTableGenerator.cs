@@ -230,7 +230,7 @@ public class PieceTableGenerator
         {
             if (square % 8 == 0)
                 Console.WriteLine();
-            Console.Write(packedData[square] + "m, ");
+            Console.Write($"{packedData[square],29}m, ");
         }
         Console.WriteLine("\n};");
     }
