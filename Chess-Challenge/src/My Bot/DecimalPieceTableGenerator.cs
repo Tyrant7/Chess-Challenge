@@ -1,8 +1,11 @@
 ﻿using System;
-using System.Linq;
 
-public class DecimalPieceTableGenerator : PieceTableGenerator<decimal>
+public abstract class DecimalPieceTableGenerator : PieceTableGenerator<decimal>
 {
+    protected abstract byte[] PackSquares(int[][] tablesToPack, int square);
+
+    protected abstract int[] UnpackSquares(decimal packedTable, ReadOnlySpan<short> pieceValues);
+
     // Packs data in the following form
     // Square data in the first 12 bytes of each decimal (1 byte per piece type, 6 per gamephase)
     protected override decimal[] PackData(int[][] tablesToPack, ReadOnlySpan<short> _)
@@ -12,13 +15,7 @@ public class DecimalPieceTableGenerator : PieceTableGenerator<decimal>
         for (int square = 0; square < tableSize; square++)
         {
             // Pack all sets for this square into a byte array
-            byte[] packedSquares = new byte[tableCount];
-            for (int set = 0; set < tableCount; set++)
-            {
-                int[] setToPack = tablesToPack[set];
-                sbyte valueToPack = (sbyte)Math.Round(setToPack[square] / 1.461);
-                packedSquares[set] = (byte)(valueToPack & 0xFF);
-            }
+            byte[] packedSquares = PackSquares(tablesToPack, square);
 
             // Create a new decimal based on the packed values for this square
             int[] thirds = new int[4];
@@ -34,17 +31,16 @@ public class DecimalPieceTableGenerator : PieceTableGenerator<decimal>
 
     // Unpacks a packed square table to be accessed with
     // pestoUnpacked[square][pieceType]
-    protected override int[][] UnpackData(decimal[] tablesToUnpack, ReadOnlySpan<short> _pieceValues)
+    protected override int[][] UnpackData(decimal[] tablesToUnpack, ReadOnlySpan<short> pieceValues)
     {
-        short[] pieceValues = new short[12];
-        _pieceValues.CopyTo(pieceValues);
-        return tablesToUnpack.Select(packedTable =>
+        int[][] unpackedData = new int[tableSize][];
+
+        for (int square = 0; square < tableSize; square++)
         {
-            int pieceType = 0;
-            return new System.Numerics.BigInteger(packedTable).ToByteArray().Take(12)
-                    .Select(square => (int)((sbyte)square * 1.461) + pieceValues[pieceType++])
-                .ToArray();
-        }).ToArray();
+            unpackedData[square] = UnpackSquares(tablesToUnpack[square], pieceValues);
+        }
+
+        return unpackedData;
     }
 
     protected override void PrintPackedData(decimal[] packedData)
