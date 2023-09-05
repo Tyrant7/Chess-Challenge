@@ -156,12 +156,6 @@ public class MyBot : IChessBot
             // Check extensions
             if (inCheck)
                 depth++;
-            // TODO: Test
-            /*
-            else if (entryKey != zobristKey && depth > 3 && !notPV)
-                depth--;
-            */
-
 
             // TODO: Look into Broxholmes' suggestion
 
@@ -196,7 +190,7 @@ public class MyBot : IChessBot
                 // Give ourselves a margin of 96 centipawns times depth.
                 // If we're up by more than that margin in material, there's no point in
                 // searching any further since our position is so good
-                if (depth <= 10 && staticEval - 96 * depth >= beta)
+                if (depth <= 7 && staticEval - 74 * depth >= beta)
                     return staticEval;
 
                 // NULL move pruning
@@ -253,13 +247,6 @@ public class MyBot : IChessBot
                 // Futility pruning
                 if (canFPrune && !(movesTried == 0 || move.IsCapture || move.IsPromotion))
                     continue;
-
-                // TODO: TEST: LMP:
-                // Late move pruning based on quiet move count
-                /*
-                if (!inCheck && beta - alpha == 1 && movesTried > 3 + depth * depth >> (1 - improving))
-                    break;
-                */
 
                 board.MakeMove(move);
 
