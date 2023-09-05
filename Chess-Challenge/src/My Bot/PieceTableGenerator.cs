@@ -1,8 +1,6 @@
 ﻿using System;
-using System.Linq;
-using System.Data;
 
-public class PieceTableGenerator
+public abstract class PieceTableGenerator<T>
 {
     public enum ScoreType
     {
@@ -146,7 +144,7 @@ public class PieceTableGenerator
     private static readonly short[] PieceValues = { 82, 337, 365, 477, 1025, 0, // Middlegame
                                                     94, 281, 297, 512, 936, 0 }; // Endgame
 
-    public static void Generate()
+    public void Generate()
     {
         int[][] table = 
         {
@@ -166,7 +164,7 @@ public class PieceTableGenerator
         };
 
         Console.WriteLine("Packed table:\n");
-        decimal[] packedData = PackData(table, PieceValues);
+        var packedData = PackData(table, PieceValues);
 
         PrintPackedData(packedData);
 
@@ -176,64 +174,12 @@ public class PieceTableGenerator
         PrintUnpackedData(unpackedData, PieceValues);
     }
 
-    private const int tableSize = 64;
-    private const int tableCount = 12;
+    protected const int tableSize = 64;
+    protected const int tableCount = 12;
 
-    // Packs data in the following form
-    // Square data in the first 12 bytes of each decimal (1 byte per piece type, 6 per gamephase)
-    private static decimal[] PackData(int[][] tablesToPack, short[] _)
-    {
-        decimal[] packedData = new decimal[tableSize];
-
-        for (int square = 0; square < tableSize; square++)
-        {
-            // Pack all sets for this square into a byte array
-            byte[] packedSquares = new byte[tableCount];
-            for (int set = 0; set < tableCount; set++)
-            {
-                int[] setToPack = tablesToPack[set];
-                sbyte valueToPack = (sbyte)Math.Round(setToPack[square] / 1.461);
-                packedSquares[set] = (byte)(valueToPack & 0xFF);
-            }
-
-            // Create a new decimal based on the packed values for this square
-            int[] thirds = new int[4];
-            for (int i = 0; i < 3; i++)
-            {
-                thirds[i] = BitConverter.ToInt32(packedSquares, i * 4);
-            }
-            packedData[square] = new(thirds);
-        }
-
-        return packedData;
-    }
-
-    // Unpacks a packed square table to be accessed with
-    // pestoUnpacked[square][pieceType]
-    private static int[][] UnpackData(decimal[] tablesToUnpack, short[] pieceValues)
-    {
-        var pestoUnpacked = tablesToUnpack.Select(packedTable =>
-        {
-            int pieceType = 0;
-            return new System.Numerics.BigInteger(packedTable).ToByteArray().Take(12)
-                    .Select(square => (int)((sbyte)square * 1.461) + pieceValues[pieceType++])
-                .ToArray();
-        }).ToArray();
-
-        return pestoUnpacked;
-    }
-
-    private static void PrintPackedData(decimal[] packedData)
-    {
-        Console.Write("{ ");
-        for (int square = 0; square < tableSize; square++)
-        {
-            if (square % 8 == 0)
-                Console.WriteLine();
-            Console.Write($"{packedData[square],29}m, ");
-        }
-        Console.WriteLine("\n};");
-    }
+    protected abstract T[] PackData(int[][] table, short[] pieceValues);
+    protected abstract void PrintPackedData(T[] packedData);
+    protected abstract int[][] UnpackData(T[] packedData, short[] pieceValues);
 
     private static void PrintUnpackedData(int[][] unpackedData, short[]? pieceValues = null)
     {
