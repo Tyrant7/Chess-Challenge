@@ -1,4 +1,4 @@
-﻿#define DEBUG
+﻿//#define DEBUG
 
 using ChessChallenge.API;
 using System;
@@ -156,11 +156,9 @@ public class MyBot : IChessBot
             // Check extensions
             if (inCheck)
                 depth++;
-            // TODO: Test
-            /*
-            else if (entryKey != zobristKey && depth > 3 && !notPV)
+            // Internal iterative reduction
+            else if (!notPV && depth > 3 && entryKey != zobristKey)
                 depth--;
-            */
 
 
             // TODO: Look into Broxholmes' suggestion
