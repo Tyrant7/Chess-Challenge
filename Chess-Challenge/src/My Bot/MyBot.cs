@@ -1,16 +1,17 @@
-﻿//#define DEBUG
+﻿#define DEBUG
 
 using ChessChallenge.API;
 using System;
 using System.Linq;
 
 // TODO: Look into adding a soft and hard bound for time management
-// TODO: Tune (again)
+// TODO: Try tuning eval
+// TODO: Play with values for dynamic NMP
 // TODO: LMP
 // TODO: Try to token optimize using multiple assignment
-// TODO: Retest bishop pair
-// TODO: Delta pruning as seen in 4ku
-// TODO: Move the assignment of unpacked pesto tables outside of array
+// TODO: Move the assignment of unpacked pesto tables outside of constructor
+// TODO: Try history based LMR
+// TODO: SPRT the beta check for PVS before full search
 
 public class MyBot : IChessBot
 {
@@ -75,16 +76,16 @@ public class MyBot : IChessBot
         // Reset history tables
         var historyHeuristics = new int[2, 7, 64];
 
-        // 1/30th of our remaining time, split among all of the moves
-        searchMaxTime = timer.MillisecondsRemaining / 30;
+        // 1/13th of our remaining time, split among all of the moves
+        searchMaxTime = timer.MillisecondsRemaining / 13;
 
         // Progressively increase search depth, starting from 2
         for (int depth = 2, alpha = -999999, beta = 999999, eval; ;)
         {
             eval = PVS(depth, alpha, beta, 0, true);
 
-            // Out of time
-            if (timer.MillisecondsElapsedThisTurn > searchMaxTime)
+            // Out of time -> soft bound exceeded
+            if (timer.MillisecondsElapsedThisTurn > searchMaxTime / 3)
                 return rootMove;
 
             // Gradual widening
@@ -237,9 +238,10 @@ public class MyBot : IChessBot
             Move bestMove = default;
             foreach (Move move in moveSpan)
             {
-                // Out of time -> return checkmate so that this move is ignored
+                // Out of time -> hard bound exceeded
+                // -> Return checkmate so that this move is ignored
                 // but better than the worst eval so a move is still picked if no moves are looked at
-                // Depth check is to disallow timeouts before the bot has found a move
+                // -> Depth check is to disallow timeouts before the bot has finished one round of ID
                 if (depth > 2 && timer.MillisecondsElapsedThisTurn > searchMaxTime)
                     return 99999;
 
@@ -280,7 +282,7 @@ public class MyBot : IChessBot
                         // update eval with a search with a null window
                         alpha < Search(alpha + 1))
 
-                    // We either raised alpha on the null window search, or haven't search yet,
+                    // We either raised alpha on the null window search, or haven't searched yet,
                     // -> research with no null window
                     Search(beta);
 
@@ -344,6 +346,8 @@ public class MyBot : IChessBot
         {
             int middlegame = 0, endgame = 0, gamephase = 0, sideToMove = 2, piece, square;
             for (; --sideToMove >= 0; middlegame = -middlegame, endgame = -endgame)
+
+                // TODO: See if I can token optimize using piece = 0 and piece < 5 then incrementing at the last instance of piece
                 for (piece = -1; ++piece < 6;)
                     for (ulong mask = board.GetPieceBitboard((PieceType)piece + 1, sideToMove > 0); mask != 0;)
                     {
@@ -357,11 +361,22 @@ public class MyBot : IChessBot
                         endgame += UnpackedPestoTables[square][piece + 6];
 
                         // Bishop pair bonus
+                        /*
                         if (piece == 2 && mask != 0)
                         {
                             middlegame += 22;
                             endgame += 18;
                         }
+                        */
+
+                        // Semi-open file bonus for rooks
+                        /*
+                        if (piece == 3 && (0x101010101010101UL << (square & 7) & board.GetPieceBitboard(PieceType.Pawn, sideToMove > 0)) == 0)
+                        {
+                            middlegame += 13;
+                            endgame += 10;
+                        }
+                        */
                     }
             // Tempo bonus to help with aspiration windows
             return (middlegame * gamephase + endgame * (24 - gamephase)) / (board.IsWhiteToMove ? 24 : -24)

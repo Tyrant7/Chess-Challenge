@@ -64,17 +64,16 @@ public class EvilBot : IChessBot
 
         // Reset history tables
         var historyHeuristics = new int[2, 7, 64];
-
-        // 1/30th of our remaining time, split among all of the moves
-        searchMaxTime = timer.MillisecondsRemaining / 30;
+        // 1/13th of our remaining time, split among all of the moves
+        searchMaxTime = timer.MillisecondsRemaining / 13;
 
         // Progressively increase search depth, starting from 2
         for (int depth = 2, alpha = -999999, beta = 999999, eval; ;)
         {
             eval = PVS(depth, alpha, beta, 0, true);
 
-            // Out of time
-            if (timer.MillisecondsElapsedThisTurn > searchMaxTime)
+            // Out of time -> soft bound exceeded
+            if (timer.MillisecondsElapsedThisTurn > searchMaxTime / 3)
                 return rootMove;
 
             // Gradual widening
@@ -334,6 +333,8 @@ public class EvilBot : IChessBot
         {
             int middlegame = 0, endgame = 0, gamephase = 0, sideToMove = 2, piece, square;
             for (; --sideToMove >= 0; middlegame = -middlegame, endgame = -endgame)
+
+                // TODO: See if I can token optimize using piece = 0 and piece < 5 then incrementing at the last instance of piece
                 for (piece = -1; ++piece < 6;)
                     for (ulong mask = board.GetPieceBitboard((PieceType)piece + 1, sideToMove > 0); mask != 0;)
                     {
@@ -345,6 +346,24 @@ public class EvilBot : IChessBot
                         square = BitboardHelper.ClearAndGetIndexOfLSB(ref mask) ^ 56 * sideToMove;
                         middlegame += UnpackedPestoTables[square][piece];
                         endgame += UnpackedPestoTables[square][piece + 6];
+
+                        // Bishop pair bonus
+                        /*
+                        if (piece == 2 && mask != 0)
+                        {
+                            middlegame += 22;
+                            endgame += 18;
+                        }
+                        */
+
+                        // Semi-open file bonus for rooks
+                        /*
+                        if (piece == 3 && (0x101010101010101UL << (square & 7) & board.GetPieceBitboard(PieceType.Pawn, sideToMove > 0)) == 0)
+                        {
+                            middlegame += 13;
+                            endgame += 10;
+                        }
+                        */
                     }
             // Tempo bonus to help with aspiration windows
             return (middlegame * gamephase + endgame * (24 - gamephase)) / (board.IsWhiteToMove ? 24 : -24)
