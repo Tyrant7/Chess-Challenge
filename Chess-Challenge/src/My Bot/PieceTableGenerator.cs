@@ -169,10 +169,14 @@ public abstract class PieceTableGenerator<T>
 
         PrintPackedData(packedData);
 
+        Console.WriteLine("\nPiece values:\n");
+        var baseValues = GetBaseValues(table, PieceValues);
+
+        PrintBaseValues(baseValues);
+
         Console.WriteLine("\nUnpacked table:");
         int[][] unpackedData = UnpackData(packedData, PieceValues);
 
-        var baseValues = GetBaseValues(table, PieceValues);
         PrintUnpackedData(unpackedData, baseValues);
     }
 
@@ -183,6 +187,11 @@ public abstract class PieceTableGenerator<T>
     protected abstract T[] PackData(int[][] table, ReadOnlySpan<short> pieceValues);
     protected abstract void PrintPackedData(T[] packedData);
     protected abstract int[][] UnpackData(T[] packedData, ReadOnlySpan<short> pieceValues);
+
+    protected virtual void PrintBaseValues(ReadOnlySpan<short> baseValues)
+    {
+        Console.WriteLine($"{{{string.Join(',', baseValues.ToArray())}}}");
+    }
 
     private void PrintUnpackedData(int[][] unpackedData, ReadOnlySpan<short> baseValues = default)
     {
