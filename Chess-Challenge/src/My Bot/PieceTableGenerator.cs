@@ -166,12 +166,12 @@ public class PieceTableGenerator
         };
 
         Console.WriteLine("Packed table:\n");
-        decimal[] packedData = PackData(table);
+        decimal[] packedData = PackData(table, PieceValues);
 
         PrintPackedData(packedData);
 
         Console.WriteLine("Unpacked table:\n");
-        int[][] unpackedData = UnpackData(packedData);
+        int[][] unpackedData = UnpackData(packedData, PieceValues);
 
         PrintUnpackedData(unpackedData, PieceValues);
     }
@@ -181,7 +181,7 @@ public class PieceTableGenerator
 
     // Packs data in the following form
     // Square data in the first 12 bytes of each decimal (1 byte per piece type, 6 per gamephase)
-    private static decimal[] PackData(int[][] tablesToPack)
+    private static decimal[] PackData(int[][] tablesToPack, short[] _)
     {
         decimal[] packedData = new decimal[tableSize];
 
@@ -210,13 +210,13 @@ public class PieceTableGenerator
 
     // Unpacks a packed square table to be accessed with
     // pestoUnpacked[square][pieceType]
-    private static int[][] UnpackData(decimal[] tablesToUnpack)
+    private static int[][] UnpackData(decimal[] tablesToUnpack, short[] pieceValues)
     {
         var pestoUnpacked = tablesToUnpack.Select(packedTable =>
         {
             int pieceType = 0;
             return new System.Numerics.BigInteger(packedTable).ToByteArray().Take(12)
-                    .Select(square => (int)((sbyte)square * 1.461) + PieceValues[pieceType++])
+                    .Select(square => (int)((sbyte)square * 1.461) + pieceValues[pieceType++])
                 .ToArray();
         }).ToArray();
 
