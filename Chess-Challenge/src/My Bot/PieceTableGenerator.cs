@@ -177,11 +177,11 @@ public abstract class PieceTableGenerator<T>
     protected const int tableSize = 64;
     protected const int tableCount = 12;
 
-    protected abstract T[] PackData(int[][] table, short[] pieceValues);
+    protected abstract T[] PackData(int[][] table, ReadOnlySpan<short> pieceValues);
     protected abstract void PrintPackedData(T[] packedData);
-    protected abstract int[][] UnpackData(T[] packedData, short[] pieceValues);
+    protected abstract int[][] UnpackData(T[] packedData, ReadOnlySpan<short> pieceValues);
 
-    private static void PrintUnpackedData(int[][] unpackedData, short[]? pieceValues = null)
+    private static void PrintUnpackedData(int[][] unpackedData, ReadOnlySpan<short> pieceValues = default)
     {
         // Print all of the unpacked values
         for (int type = 0; type < tableCount; type++)
@@ -192,7 +192,7 @@ public abstract class PieceTableGenerator<T>
                 if (square % 8 == 0)
                     Console.WriteLine();
 
-                Console.Write($"{unpackedData[square][type] - (pieceValues is null ? 0 : pieceValues[type]),4}, ");
+                Console.Write($"{unpackedData[square][type] - (pieceValues.IsEmpty ? 0 : pieceValues[type]),4}, ");
             }
             Console.WriteLine();
         }

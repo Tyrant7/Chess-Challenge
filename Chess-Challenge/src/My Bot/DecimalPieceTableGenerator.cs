@@ -5,7 +5,7 @@ public class DecimalPieceTableGenerator : PieceTableGenerator<decimal>
 {
     // Packs data in the following form
     // Square data in the first 12 bytes of each decimal (1 byte per piece type, 6 per gamephase)
-    protected override decimal[] PackData(int[][] tablesToPack, short[] _)
+    protected override decimal[] PackData(int[][] tablesToPack, ReadOnlySpan<short> _)
     {
         decimal[] packedData = new decimal[tableSize];
 
@@ -34,8 +34,10 @@ public class DecimalPieceTableGenerator : PieceTableGenerator<decimal>
 
     // Unpacks a packed square table to be accessed with
     // pestoUnpacked[square][pieceType]
-    protected override int[][] UnpackData(decimal[] tablesToUnpack, short[] pieceValues)
+    protected override int[][] UnpackData(decimal[] tablesToUnpack, ReadOnlySpan<short> _pieceValues)
     {
+        short[] pieceValues = new short[12];
+        _pieceValues.CopyTo(pieceValues);
         return tablesToUnpack.Select(packedTable =>
         {
             int pieceType = 0;
