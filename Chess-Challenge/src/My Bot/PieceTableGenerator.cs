@@ -168,7 +168,7 @@ public abstract class PieceTableGenerator<T>
 
         PrintPackedData(packedData);
 
-        Console.WriteLine("Unpacked table:\n");
+        Console.WriteLine("\nUnpacked table:");
         int[][] unpackedData = UnpackData(packedData, PieceValues);
 
         PrintUnpackedData(unpackedData, PieceValues);
