@@ -244,7 +244,7 @@ public class PieceTableGenerator
                 if (square % 8 == 0)
                     Console.WriteLine();
 
-                Console.Write(unpackedData[square][type] + ", ");
+                Console.Write($"{unpackedData[square][type],4}, ");
             }
             Console.WriteLine();
         }
