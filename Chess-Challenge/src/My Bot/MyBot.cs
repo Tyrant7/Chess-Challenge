@@ -1,4 +1,4 @@
-﻿#define DEBUG
+﻿//#define DEBUG
 
 using ChessChallenge.API;
 using System;
@@ -8,9 +8,10 @@ using System.Linq;
 // TODO: Play with values for dynamic NMP
 // TODO: LMP
 // TODO: Try to token optimize using multiple assignment
-// TODO: Move the assignment of unpacked pesto tables outside of constructor
 // TODO: Try history based LMR
 // TODO: SPRT the beta check for PVS before full search
+// TODO: Retest tempo bonus
+// TODO: Test Damnian's unpacking method
 
 public class MyBot : IChessBot
 {
@@ -156,6 +157,12 @@ public class MyBot : IChessBot
             // Check extensions
             if (inCheck)
                 depth++;
+            // Internal iterative reduction
+            // TODO: SPRT
+            /*
+            else if (!notPV && entryKey != zobristKey && depth > 6)
+                depth--;
+            */
 
             // TODO: Look into Broxholmes' suggestion
 
@@ -259,7 +266,7 @@ public class MyBot : IChessBot
                 // TODO: TEST: LMP:
                 // Late move pruning based on quiet move count
                 /*
-                if (!inCheck && beta - alpha == 1 && movesTried > 3 + depth * depth >> (1 - improving))
+                if (!inCheck && notPV && movesTried > 3 + depth * depth)
                     break;
                 */
 
@@ -379,8 +386,8 @@ public class MyBot : IChessBot
                         }
                         */
                     }
-            // Tempo bonus to help with aspiration windows
             return (middlegame * gamephase + endgame * (24 - gamephase)) / (board.IsWhiteToMove ? 24 : -24)
+                // Tempo bonus to help with aspiration windows
                 + gamephase / 2;
         }
     }
