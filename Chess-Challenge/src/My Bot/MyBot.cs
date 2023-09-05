@@ -157,8 +157,10 @@ public class MyBot : IChessBot
             if (inCheck)
                 depth++;
             // Internal iterative reduction
+            /*
             else if (!notPV && depth > 3 && entryKey != zobristKey)
                 depth--;
+            */
 
 
             // TODO: Look into Broxholmes' suggestion
