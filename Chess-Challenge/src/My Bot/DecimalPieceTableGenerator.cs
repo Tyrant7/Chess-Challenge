@@ -6,6 +6,16 @@ public abstract class DecimalPieceTableGenerator : PieceTableGenerator<decimal>
 
     protected abstract int[] UnpackSquares(decimal packedTable, ReadOnlySpan<short> pieceValues);
 
+    protected override ReadOnlySpan<short> GetBaseValues(int[][] table, ReadOnlySpan<short> pieceValues)
+    {
+        short[] baseValues = new short[12];
+        for (int type = 0; type < 6; ++type)
+        {
+            SetBaseValue(table, baseValues, type);
+        }
+        return baseValues;
+    }
+
     // Packs data in the following form
     // Square data in the first 12 bytes of each decimal (1 byte per piece type, 6 per gamephase)
     protected override decimal[] PackData(int[][] tablesToPack, ReadOnlySpan<short> pieceValues)

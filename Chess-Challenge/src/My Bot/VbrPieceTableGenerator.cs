@@ -7,16 +7,6 @@ public class VbrPieceTableGenerator : DecimalPieceTableGenerator
     private const long shifts8 = 0x212819110800;
     private const long masks10 = 0b0001111111_0011111111_0011111111_0011111111_0111111111_0011111111;
 
-    protected override ReadOnlySpan<short> GetBaseValues(int[][] table, ReadOnlySpan<short> pieceValues)
-    {
-        short[] baseValues = new short[12];
-        for (int type = 0; type < 6; ++type)
-        {
-            SetBaseValue(table, baseValues, type);
-        }
-        return baseValues;
-    }
-
     protected override byte[] PackSquares(int[][] table, ReadOnlySpan<short> baseValues, int square)
     {
         return GetBytes(table, baseValues, square, 0).Concat(GetBytes(table, baseValues, square, 6)).ToArray();
