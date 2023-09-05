@@ -11,6 +11,8 @@ using System.Linq;
 // TODO: Move the assignment of unpacked pesto tables outside of constructor
 // TODO: Try history based LMR
 // TODO: SPRT the beta check for PVS before full search
+// TODO: Change around how unpacking PeSTO tables works
+//    -> bake differences between middlegame and endgame piece values into the squares themselves and just add a base piece value
 
 public class MyBot : IChessBot
 {
