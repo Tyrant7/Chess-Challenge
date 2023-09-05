@@ -1,9 +1,7 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Data;
 
-public class PieceTableGenerator
+public abstract class PieceTableGenerator<T>
 {
     public enum ScoreType
     {
@@ -147,9 +145,9 @@ public class PieceTableGenerator
     private static readonly short[] PieceValues = { 82, 337, 365, 477, 1025, 0, // Middlegame
                                                     94, 281, 297, 512, 936, 0 }; // Endgame
 
-    public static void Generate()
+    public void Generate()
     {
-        List<int[]> table = new()
+        int[][] table = 
         {
             mg_pawn_table,
             mg_knight_table,
@@ -167,74 +165,35 @@ public class PieceTableGenerator
         };
 
         Console.WriteLine("Packed table:\n");
-        decimal[] packedData = PackData(table);
+        var packedData = PackData(table, PieceValues);
 
-        Console.Write(packedData);
+        PrintPackedData(packedData);
 
-        Console.WriteLine("Unpacked table:\n");
-        int[][] unpackedData = UnpackData(packedData);
+        Console.WriteLine("\nPiece values:\n");
+        var baseValues = GetBaseValues(table, PieceValues);
 
-        PrintUnpackedData(unpackedData);
+        PrintBaseValues(baseValues);
+
+        Console.WriteLine("\nUnpacked table:");
+        int[][] unpackedData = UnpackData(packedData, PieceValues);
+
+        PrintUnpackedData(unpackedData, baseValues);
     }
 
-    private const int tableSize = 64;
-    private const int tableCount = 12;
+    protected const int tableSize = 64;
+    protected const int tableCount = 12;
 
-    // Packs data in the following form
-    // Square data in the first 12 bytes of each decimal (1 byte per piece type, 6 per gamephase)
-    private static decimal[] PackData(List<int[]> tablesToPack)
+    protected abstract ReadOnlySpan<short> GetBaseValues(int[][] table, ReadOnlySpan<short> pieceValues);
+    protected abstract T[] PackData(int[][] table, ReadOnlySpan<short> pieceValues);
+    protected abstract void PrintPackedData(T[] packedData);
+    protected abstract int[][] UnpackData(T[] packedData, ReadOnlySpan<short> pieceValues);
+
+    protected virtual void PrintBaseValues(ReadOnlySpan<short> baseValues)
     {
-        decimal[] packedData = new decimal[tableSize];
-
-        for (int square = 0; square < tableSize; square++)
-        {
-            // Pack all sets for this square into a byte array
-            byte[] packedSquares = new byte[tableCount];
-            for (int set = 0; set < tableCount; set++)
-            {
-                int[] setToPack = tablesToPack[set];
-                sbyte valueToPack = (sbyte)Math.Round(setToPack[square] / 1.461);
-                packedSquares[set] = (byte)(valueToPack & 0xFF);
-            }
-
-            // Create a new decimal based on the packed values for this square
-            int[] thirds = new int[4];
-            for (int i = 0; i < 3; i++)
-            {
-                thirds[i] = BitConverter.ToInt32(packedSquares, i * 4);
-            }
-            packedData[square] = new(thirds);
-        }
-
-        // Print the newly created table
-        Console.Write("{ ");
-        for (int square = 0; square < tableSize; square++)
-        {
-            if (square % 8 == 0)
-                Console.WriteLine();
-            Console.Write(packedData[square] + "m, ");
-        }
-        Console.WriteLine("\n};");
-
-        return packedData;
+        Console.WriteLine($"{{{string.Join(',', baseValues.ToArray())}}}");
     }
 
-    // Unpacks a packed square table to be accessed with
-    // pestoUnpacked[square][pieceType]
-    private static int[][] UnpackData(decimal[] tablesToUnpack)
-    {
-        var pestoUnpacked = tablesToUnpack.Select(packedTable =>
-        {
-            int pieceType = 0;
-            return new System.Numerics.BigInteger(packedTable).ToByteArray().Take(12)
-                    .Select(square => (int)((sbyte)square * 1.461) + PieceValues[pieceType++])
-                .ToArray();
-        }).ToArray();
-
-        return pestoUnpacked;
-    }
-
-    private static void PrintUnpackedData(int[][] unpackedData)
+    private void PrintUnpackedData(int[][] unpackedData, ReadOnlySpan<short> baseValues = default)
     {
         // Print all of the unpacked values
         for (int type = 0; type < tableCount; type++)
@@ -245,9 +204,30 @@ public class PieceTableGenerator
                 if (square % 8 == 0)
                     Console.WriteLine();
 
-                Console.Write(unpackedData[square][type] + ", ");
+                Console.Write($"{unpackedData[square][type] - (baseValues.IsEmpty ? 0 : baseValues[type]),4}, ");
             }
             Console.WriteLine();
         }
+    }
+
+    private static void PrintOriginalData(int[][] table)
+    {
+        for (int type = 0; type < tableCount; type++)
+        {
+            Console.WriteLine("\n\nTable for type: " + (ScoreType)type);
+            for (int square = 0; square < tableSize; square++)
+            {
+                if (square % 8 == 0)
+                    Console.WriteLine();
+
+                Console.Write($"{table[type][square],4}, ");
+            }
+            Console.WriteLine();
+        }
+    }
+
+    protected static void SetBaseValue(int[][] table, short[] baseValues, int type)
+    {
+        baseValues[type] = baseValues[type + 6] = (short)-Math.Min(table[type].Min(), table[type + 6].Min());
     }
 }
