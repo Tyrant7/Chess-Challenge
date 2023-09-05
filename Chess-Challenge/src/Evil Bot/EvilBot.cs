@@ -64,6 +64,7 @@ public class EvilBot : IChessBot
 
         // Reset history tables
         var historyHeuristics = new int[2, 7, 64];
+
         // 1/13th of our remaining time, split among all of the moves
         searchMaxTime = timer.MillisecondsRemaining / 13;
 
@@ -226,9 +227,10 @@ public class EvilBot : IChessBot
             Move bestMove = default;
             foreach (Move move in moveSpan)
             {
-                // Out of time -> return checkmate so that this move is ignored
+                // Out of time -> hard bound exceeded
+                // -> Return checkmate so that this move is ignored
                 // but better than the worst eval so a move is still picked if no moves are looked at
-                // Depth check is to disallow timeouts before the bot has found a move
+                // -> Depth check is to disallow timeouts before the bot has finished one round of ID
                 if (depth > 2 && timer.MillisecondsElapsedThisTurn > searchMaxTime)
                     return 99999;
 
@@ -269,7 +271,7 @@ public class EvilBot : IChessBot
                         // update eval with a search with a null window
                         alpha < Search(alpha + 1))
 
-                    // We either raised alpha on the null window search, or haven't search yet,
+                    // We either raised alpha on the null window search, or haven't searched yet,
                     // -> research with no null window
                     Search(beta);
 

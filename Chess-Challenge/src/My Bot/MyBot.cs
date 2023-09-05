@@ -4,7 +4,6 @@ using ChessChallenge.API;
 using System;
 using System.Linq;
 
-// TODO: Look into adding a soft and hard bound for time management
 // TODO: Try tuning eval
 // TODO: Play with values for dynamic NMP
 // TODO: LMP
@@ -172,7 +171,9 @@ public class MyBot : IChessBot
                 return entryScore;
 
             // Declare QSearch status here to prevent dropping into QSearch while in check
-            bool inQSearch = depth <= 0;
+            bool inQSearch = depth <= 0,
+                 onlyCaptures = inQSearch && !inCheck;
+
             if (inQSearch)
             {
                 // Determine if quiescence search should be continued
@@ -219,7 +220,13 @@ public class MyBot : IChessBot
 
             // Generate appropriate moves depending on whether we're in QSearch
             Span<Move> moveSpan = stackalloc Move[218];
-            board.GetLegalMovesNonAlloc(ref moveSpan, inQSearch && !inCheck);
+            board.GetLegalMovesNonAlloc(ref moveSpan, onlyCaptures);
+
+            // Gamestate, checkmate and draws
+            // -> if we have no legal moves and aren't only checking captures,
+            // we can return before sorting moves to save time
+            if (moveSpan.IsEmpty && !onlyCaptures)
+                return inCheck ? plyFromRoot - 99999 : 0;
 
             // Order moves in reverse order -> negative values are ordered higher hence the flipped values
             foreach (Move move in moveSpan)
@@ -324,12 +331,6 @@ public class MyBot : IChessBot
                     }
                 }
             }
-
-            // Gamestate, checkmate and draws
-            // -> no moves were looked at and eval was unchanged
-            // -> must not be in QSearch and have had no legal moves
-            if (bestEval == -9999999)
-                return inCheck ? plyFromRoot - 99999 : 0;
 
             // Transposition table insertion
             transpositionTable[zobristKey & 0x3FFFFF] = (
