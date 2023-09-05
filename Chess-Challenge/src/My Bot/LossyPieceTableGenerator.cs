@@ -2,7 +2,12 @@
 
 public class LossyPieceTableGenerator : DecimalPieceTableGenerator
 {
-    protected override byte[] PackSquares(int[][] tablesToPack, int square)
+    protected override ReadOnlySpan<short> GetBaseValues(int[][] tablesToPack, ReadOnlySpan<short> pieceValues)
+    {
+        return pieceValues;
+    }
+
+    protected override byte[] PackSquares(int[][] tablesToPack, ReadOnlySpan<short> _, int square)
     {
         byte[] packedSquares = new byte[tableCount];
 

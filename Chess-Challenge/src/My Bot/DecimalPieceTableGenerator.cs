@@ -2,20 +2,21 @@
 
 public abstract class DecimalPieceTableGenerator : PieceTableGenerator<decimal>
 {
-    protected abstract byte[] PackSquares(int[][] tablesToPack, int square);
+    protected abstract byte[] PackSquares(int[][] tablesToPack, ReadOnlySpan<short> baseValues, int square);
 
     protected abstract int[] UnpackSquares(decimal packedTable, ReadOnlySpan<short> pieceValues);
 
     // Packs data in the following form
     // Square data in the first 12 bytes of each decimal (1 byte per piece type, 6 per gamephase)
-    protected override decimal[] PackData(int[][] tablesToPack, ReadOnlySpan<short> _)
+    protected override decimal[] PackData(int[][] tablesToPack, ReadOnlySpan<short> pieceValues)
     {
         decimal[] packedData = new decimal[tableSize];
+        var baseValues = GetBaseValues(tablesToPack, pieceValues);
 
         for (int square = 0; square < tableSize; square++)
         {
             // Pack all sets for this square into a byte array
-            byte[] packedSquares = PackSquares(tablesToPack, square);
+            byte[] packedSquares = PackSquares(tablesToPack, baseValues, square);
 
             // Create a new decimal based on the packed values for this square
             int[] thirds = new int[4];

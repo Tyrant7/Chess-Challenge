@@ -1,21 +1,25 @@
 ﻿using System;
-using System.Linq;
 
 public class LongPieceTableGenerator : PieceTableGenerator<long>
 {
-    protected override long[] PackData(int[][] table, ReadOnlySpan<short> _pieceValues)
+    protected override ReadOnlySpan<short> GetBaseValues(int[][] table, ReadOnlySpan<short> pieceValues)
     {
-        short[] pieceValues = new short[12];
-        _pieceValues.CopyTo(pieceValues);
-        pieceValues[(int)ScoreType.KingMG] = pieceValues[(int)ScoreType.KingEG] =
-            (short)-Math.Min(table[(int)ScoreType.KingMG].Min(), table[(int)ScoreType.KingEG].Min());
+        short[] baseValues = new short[12];
+        pieceValues.CopyTo(baseValues);
+        SetBaseValue(table, baseValues, (int)ScoreType.KingMG);
+        return baseValues;
+    }
+
+    protected override long[] PackData(int[][] table, ReadOnlySpan<short> pieceValues)
+    {
         long[] packedData = new long[128];
+        var baseValues = GetBaseValues(table, pieceValues);
         for (int type = 0; type < 6; ++type)
         {
             for (int square = 0; square < 64; ++square)
             {
-                packedData[square] |= (long)(pieceValues[type] + table[type][square]) << type * 11;
-                packedData[square + 64] |= (long)(pieceValues[type + 6] + table[type + 6][square]) << type % 6 * 11;
+                packedData[square] |= (long)(baseValues[type] + table[type][square]) << type * 11;
+                packedData[square + 64] |= (long)(baseValues[type + 6] + table[type + 6][square]) << type % 6 * 11;
             }
         }
         return packedData;
