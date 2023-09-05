@@ -173,7 +173,7 @@ public class PieceTableGenerator
         Console.WriteLine("Unpacked table:\n");
         int[][] unpackedData = UnpackData(packedData);
 
-        PrintUnpackedData(unpackedData);
+        PrintUnpackedData(unpackedData, PieceValues);
     }
 
     private const int tableSize = 64;
@@ -233,7 +233,7 @@ public class PieceTableGenerator
         return pestoUnpacked;
     }
 
-    private static void PrintUnpackedData(int[][] unpackedData)
+    private static void PrintUnpackedData(int[][] unpackedData, short[]? pieceValues = null)
     {
         // Print all of the unpacked values
         for (int type = 0; type < tableCount; type++)
@@ -244,7 +244,7 @@ public class PieceTableGenerator
                 if (square % 8 == 0)
                     Console.WriteLine();
 
-                Console.Write($"{unpackedData[square][type],4}, ");
+                Console.Write($"{unpackedData[square][type] - (pieceValues is null ? 0 : pieceValues[type]),4}, ");
             }
             Console.WriteLine();
         }
