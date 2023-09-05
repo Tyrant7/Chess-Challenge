@@ -56,7 +56,7 @@ public class MyBot : IChessBot
         }.Select(packedTable =>
         new System.Numerics.BigInteger(packedTable).ToByteArray().Take(12)
                     // Using search max time since it's an integer than initializes to zero and is assgined before being used again 
-                    .Select(square => (int)(square + 0x01283211C521F823 >> searchMaxTime++ % 6 * 10))
+                    .Select(square => square + (int)(0x01283211C521F823 >> searchMaxTime++ % 6 * 10))
                 .ToArray()
         ).ToArray();
     }
