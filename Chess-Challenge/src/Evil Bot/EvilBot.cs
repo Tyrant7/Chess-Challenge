@@ -177,10 +177,10 @@ public class EvilBot : IChessBot
                 // Reverse futility pruning
                 int staticEval = Evaluate();
 
-                // Give ourselves a margin of 96 centipawns times depth.
+                // Give ourselves a margin of 74 centipawns times depth.
                 // If we're up by more than that margin in material, there's no point in
                 // searching any further since our position is so good
-                if (depth <= 10 && staticEval - 96 * depth >= beta)
+                if (depth <= 7 && staticEval - 74 * depth >= beta)
                     return staticEval;
 
                 // NULL move pruning
