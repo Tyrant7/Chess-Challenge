@@ -1,36 +1,21 @@
 ﻿using System;
 
-public class LossyPieceTableGenerator : DecimalPieceTableGenerator
+public class LossyPieceTableGenerator : DecimalBitsPieceTableGenerator
 {
-    protected override ReadOnlySpan<short> GetBaseValues(int[][] tablesToPack, ReadOnlySpan<short> pieceValues)
+    protected override ReadOnlySpan<short> GetBaseValues(int[][] _, ReadOnlySpan<short> pieceValues)
     {
         return pieceValues;
     }
 
-    protected override byte[] PackSquares(int[][] tablesToPack, ReadOnlySpan<short> _, int square)
+    protected override byte PackSquare(int[][] tablesToPack, ReadOnlySpan<short> _, int square, int set)
     {
-        byte[] packedSquares = new byte[tableCount];
-
-        for (int set = 0; set < tableCount; set++)
-        {
-            int[] setToPack = tablesToPack[set];
-            sbyte valueToPack = (sbyte)Math.Round(setToPack[square] / 1.461);
-            packedSquares[set] = (byte)(valueToPack & 0xFF);
-        }
-
-        return packedSquares;
+        int[] setToPack = tablesToPack[set];
+        sbyte valueToPack = (sbyte)Math.Round(setToPack[square] / 1.461);
+        return (byte)valueToPack;
     }
 
-    protected override int[] UnpackSquares(decimal packedTable, ReadOnlySpan<short> pieceValues)
+    protected override int UnpackSquare(int valueToUnpack, ReadOnlySpan<short> pieceValues, int set)
     {
-        int[] unpackedSquares = new int[tableCount];
-        byte[] bytes = new System.Numerics.BigInteger(packedTable).ToByteArray();
-
-        for (int set = 0; set < tableCount; set++)
-        {
-            unpackedSquares[set] = (int)((sbyte)bytes[set] * 1.461) + pieceValues[set];
-        }
-
-        return unpackedSquares;
+        return (int)((sbyte)valueToUnpack * 1.461 + pieceValues[set]);
     }
 }
