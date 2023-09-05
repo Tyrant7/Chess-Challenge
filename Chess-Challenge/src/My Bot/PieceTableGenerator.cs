@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Data;
 
@@ -149,7 +148,7 @@ public class PieceTableGenerator
 
     public static void Generate()
     {
-        List<int[]> table = new()
+        int[][] table = 
         {
             mg_pawn_table,
             mg_knight_table,
@@ -182,7 +181,7 @@ public class PieceTableGenerator
 
     // Packs data in the following form
     // Square data in the first 12 bytes of each decimal (1 byte per piece type, 6 per gamephase)
-    private static decimal[] PackData(List<int[]> tablesToPack)
+    private static decimal[] PackData(int[][] tablesToPack)
     {
         decimal[] packedData = new decimal[tableSize];
 
