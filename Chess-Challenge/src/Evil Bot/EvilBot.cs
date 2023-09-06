@@ -187,6 +187,8 @@ public class EvilBot : IChessBot
                 if (depth >= 2 && staticEval >= beta && allowNull)
                 {
                     board.ForceSkipTurn();
+
+                    // TODO: Play with values: Try a max of 4 instead of 6
                     Search(beta, 3 + depth / 4 + Math.Min(6, (staticEval - beta) / 175), false);
                     board.UndoSkipTurn();
 
@@ -237,13 +239,6 @@ public class EvilBot : IChessBot
                 // Futility pruning
                 if (canFPrune && !(movesTried == 0 || move.IsCapture || move.IsPromotion))
                     continue;
-
-                // TODO: TEST: LMP:
-                // Late move pruning based on quiet move count
-                /*
-                if (!inCheck && beta - alpha == 1 && movesTried > 3 + depth * depth >> (1 - improving))
-                    break;
-                */
 
                 board.MakeMove(move);
 
@@ -349,16 +344,14 @@ public class EvilBot : IChessBot
                         middlegame += UnpackedPestoTables[square][piece];
                         endgame += UnpackedPestoTables[square][piece + 6];
 
-                        // Bishop pair bonus
-                        /*
+                        // Bishop pair bonus (+14.1 elo alone)
                         if (piece == 2 && mask != 0)
                         {
                             middlegame += 22;
                             endgame += 18;
                         }
-                        */
 
-                        // Semi-open file bonus for rooks
+                        // Semi-open file bonus for rooks (+14.6 elo alone)
                         /*
                         if (piece == 3 && (0x101010101010101UL << (square & 7) & board.GetPieceBitboard(PieceType.Pawn, sideToMove > 0)) == 0)
                         {
@@ -366,9 +359,20 @@ public class EvilBot : IChessBot
                             endgame += 10;
                         }
                         */
+
+                        // Mobility bonus (+15 elo alone)
+                        /*
+                        if (piece >= 2 && piece <= 4)
+                        {
+                            int bonus = BitboardHelper.GetNumberOfSetBits(
+                                BitboardHelper.GetPieceAttacks((PieceType)piece + 1, new Square(square ^ 56 * sideToMove), board, sideToMove > 0));
+                            middlegame += bonus;
+                            endgame += bonus * 2;
+                        }
+                        */
                     }
-            // Tempo bonus to help with aspiration windows
             return (middlegame * gamephase + endgame * (24 - gamephase)) / (board.IsWhiteToMove ? 24 : -24)
+            // Tempo bonus to help with aspiration windows
                 + gamephase / 2;
         }
     }

@@ -199,6 +199,8 @@ public class MyBot : IChessBot
                 if (depth >= 2 && staticEval >= beta && allowNull)
                 {
                     board.ForceSkipTurn();
+
+                    // TODO: Play with values: Try a max of 4 instead of 6
                     Search(beta, 3 + depth / 4 + Math.Min(6, (staticEval - beta) / 175), false);
                     board.UndoSkipTurn();
 
@@ -354,7 +356,7 @@ public class MyBot : IChessBot
                         middlegame += UnpackedPestoTables[square][piece];
                         endgame += UnpackedPestoTables[square][piece + 6];
 
-                        // Bishop pair bonus (+20 elo alone)
+                        // Bishop pair bonus (+14.1 elo alone)
                         if (piece == 2 && mask != 0)
                         {
                             middlegame += 22;
