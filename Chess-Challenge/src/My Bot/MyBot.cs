@@ -1,4 +1,4 @@
-﻿#define DEBUG
+﻿//#define DEBUG
 
 using ChessChallenge.API;
 using System;
@@ -354,21 +354,30 @@ public class MyBot : IChessBot
                         middlegame += UnpackedPestoTables[square][piece];
                         endgame += UnpackedPestoTables[square][piece + 6];
 
-                        // Bishop pair bonus
-                        /*
+                        // Bishop pair bonus (+20 elo alone)
                         if (piece == 2 && mask != 0)
                         {
                             middlegame += 22;
                             endgame += 18;
                         }
-                        */
 
-                        // Semi-open file bonus for rooks
+                        // Semi-open file bonus for rooks (+14.6 elo alone)
                         /*
                         if (piece == 3 && (0x101010101010101UL << (square & 7) & board.GetPieceBitboard(PieceType.Pawn, sideToMove > 0)) == 0)
                         {
                             middlegame += 13;
                             endgame += 10;
+                        }
+                        */
+
+                        // Mobility bonus (+15 elo alone)
+                        /*
+                        if (piece >= 2 && piece <= 4)
+                        {
+                            int bonus = BitboardHelper.GetNumberOfSetBits(
+                                BitboardHelper.GetPieceAttacks((PieceType)piece + 1, new Square(square ^ 56 * sideToMove), board, sideToMove > 0));
+                            middlegame += bonus;
+                            endgame += bonus * 2;
                         }
                         */
                     }
