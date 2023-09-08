@@ -1,4 +1,4 @@
-﻿//#define DEBUG
+﻿#define DEBUG
 
 using ChessChallenge.API;
 using System;
@@ -6,13 +6,12 @@ using System.Linq;
 
 // TODO: Try tuning eval
 // TODO: Play with values for dynamic NMP
-// TODO: LMP
 // TODO: Try to token optimize using multiple assignment
 // TODO: Move the assignment of unpacked pesto tables outside of constructor
-// TODO: Try history based LMR
 // TODO: SPRT the beta check for PVS before full search
 // TODO: Change around how unpacking PeSTO tables works
 //    -> bake differences between middlegame and endgame piece values into the squares themselves and just add a base piece value
+// TODO: Test removing tempo bonus
 
 public class MyBot : IChessBot
 {
@@ -385,7 +384,7 @@ public class MyBot : IChessBot
                     }
             return (middlegame * gamephase + endgame * (24 - gamephase)) / (board.IsWhiteToMove ? 24 : -24)
             // Tempo bonus to help with aspiration windows
-                + gamephase / 2;
+                + 16;
         }
     }
 }

@@ -373,7 +373,7 @@ public class EvilBot : IChessBot
                     }
             return (middlegame * gamephase + endgame * (24 - gamephase)) / (board.IsWhiteToMove ? 24 : -24)
             // Tempo bonus to help with aspiration windows
-                + gamephase / 2;
+                + 16;
         }
     }
 }
