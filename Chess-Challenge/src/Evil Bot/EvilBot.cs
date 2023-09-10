@@ -330,9 +330,7 @@ public class EvilBot : IChessBot
         {
             int middlegame = 0, endgame = 0, gamephase = 0, sideToMove = 2, piece, square;
             for (; --sideToMove >= 0; middlegame = -middlegame, endgame = -endgame)
-
-                // TODO: See if I can token optimize using piece = 0 and piece < 5 then incrementing at the last instance of piece
-                for (piece = -1; ++piece < 6;)
+                for (piece = 6; --piece >= 0;)
                     for (ulong mask = board.GetPieceBitboard((PieceType)piece + 1, sideToMove > 0); mask != 0;)
                     {
                         // Gamephase, middlegame -> endgame
