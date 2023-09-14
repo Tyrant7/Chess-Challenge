@@ -4,27 +4,26 @@ using ChessChallenge.API;
 using System;
 using System.Linq;
 
-// TODO: Try tuning eval
+// TODO: IMPORTANT: Get a real opening book
 // TODO: Play with values for dynamic NMP
-// TODO: Try to token optimize using multiple assignment
 // TODO: SPRT the beta check for PVS before full search
 // TODO: Change around how unpacking PeSTO tables works
 //    -> bake differences between middlegame and endgame piece values into the squares themselves and just add a base piece value
 // TODO: Test using a QSearch for static evaluation instead of a straight eval
-// TODO: Store killer moves as the move's integer raw value to save tokens on the declaration
 // TODO: Test for timeout above move loop
 // TODO: SPRT running a static evaluation for all nodes instead of excluding PV and checks so that evaluation can be inlined
+// TODO: LMP (again lol)
 
 public class MyBot : IChessBot
 {
     // Pawn, Knight, Bishop, Rook, Queen, King 
     private static readonly int[] PieceValues = { 77, 302, 310, 434, 890, 0, // Middlegame
                                                  109, 331, 335, 594, 1116, 0, }, // Endgame
-                                  MoveScores = new int[218];
+                                  MoveScores = new int[218],
 
     // Big table packed with data from premade piece square tables
-    // Access using using PackedEvaluationTables[square][pieceType] = score
-    private readonly int[][] UnpackedPestoTables = 
+    // Access using using PackedEvaluationTables[square * 12 + pieceType] = score
+    UnpackedPestoTables = 
         new[] {
             59445390105436474986072674560m, 70290677894333901267150682880m, 71539517137735599738519086336m, 78957476706409475571971323392m, 76477941479143404670656189696m, 78020492916263816717520067072m, 77059410983631195892660944640m, 61307098105356489251813834752m,
             77373759864583735626648317994m, 3437103645554060776222818613m, 5013542988189698109836108074m, 2865258213628105516468149820m, 5661498819074815745865228343m, 8414185094009835055136457260m, 7780689186187929908113377023m, 2486769613674807657298071274m,
@@ -34,7 +33,7 @@ public class MyBot : IChessBot
             74280085839011331528989207781m, 324048954150360030097570806m, 4681017700776466875968718582m, 7150867317927305549636569078m, 7155688890998399537110584833m, 5600986637454890754120354040m, 1563108101768245091211217423m, 78303310575846526174794479097m,
             70256775951642154667751105509m, 76139418398446961904222530552m, 78919952506429230065925355250m, 2485617727604605227028709358m, 3105768375617668305352130555m, 1225874429600076432248013062m, 76410151742261424234463229975m, 72367527118297610444645922550m,
             64062225663112462441888793856m, 67159522168020586196575185664m, 71185268483909686702087266048m, 75814236297773358797609495296m, 69944882517184684696171572480m, 74895414840161820695659345152m, 69305332238573146615004392448m, 63422661310571918454614119936m,
-        }.Select(packedTable =>
+        }.SelectMany(packedTable =>
         new System.Numerics.BigInteger(packedTable).ToByteArray().Take(12)
                     // Using search max time since it's an integer than initializes to zero and is assgined before being used again 
                     .Select((square, index) => (int)((sbyte)square * 1.461) + PieceValues[index % 12])
@@ -347,8 +346,8 @@ public class MyBot : IChessBot
 
                         // Material and square evaluation
                         square = BitboardHelper.ClearAndGetIndexOfLSB(ref mask) ^ 56 * sideToMove;
-                        middlegame += UnpackedPestoTables[square][piece];
-                        endgame += UnpackedPestoTables[square][piece + 6];
+                        middlegame += UnpackedPestoTables[square * 12 + piece];
+                        endgame += UnpackedPestoTables[square * 12 + piece + 6];
 
                         // Bishop pair bonus (+14.1 elo alone)
                         if (piece == 2 && mask != 0)
