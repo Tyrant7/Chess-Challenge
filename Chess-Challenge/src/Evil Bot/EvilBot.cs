@@ -337,11 +337,18 @@ public class EvilBot : IChessBot
                         middlegame += UnpackedPestoTables[square * 12 + piece];
                         endgame += UnpackedPestoTables[square * 12 + piece + 6];
 
-                        // Bishop pair bonus (+14.1 elo alone)
+                        // Bishop pair bonus
                         if (piece == 2 && mask != 0)
                         {
                             middlegame += 23;
                             endgame += 62;
+                        }
+
+                        // Doubled pawns penalty (brought to my attention by Y3737)
+                        if (piece == 0 && (0x101010101010101UL << (square & 7) & mask) > 0)
+                        {
+                            middlegame -= 15;
+                            endgame -= 15;
                         }
 
                         // Semi-open file bonus for rooks (+14.6 elo alone)
