@@ -74,11 +74,11 @@ public class MyBot : IChessBot
         // 1/13th of our remaining time, split among all of the moves
         int searchMaxTime = timer.MillisecondsRemaining / 13,
             // Progressively increase search depth, starting from 2
-            depth = 2, alpha = -999999, beta = 999999, eval;
+            thinkDepth = 2, alpha = -999999, beta = 999999, eval;
 
         for (; ; )
         {
-            eval = PVS(depth++, alpha, beta, 0, true);
+            eval = PVS(thinkDepth++, alpha, beta, 0, true);
 
             // Out of time -> soft bound exceeded
             if (timer.MillisecondsElapsedThisTurn > searchMaxTime / 3)
@@ -101,7 +101,7 @@ public class MyBot : IChessBot
                 }
 
                 Console.WriteLine("Info: depth: {0, 2} || eval: {1, 6} || nodes: {2, 9} || nps: {3, 8} || time: {4, 5}ms || best move: {5}{6}",
-                    depth - 1,
+                    thinkDepth - 1,
                     evalWithMate,
                     nodes,
                     1000 * nodes / (timer.MillisecondsElapsedThisTurn + 1),
