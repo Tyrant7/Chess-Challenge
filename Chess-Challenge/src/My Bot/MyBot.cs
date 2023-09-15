@@ -13,7 +13,6 @@ using System.Linq;
 // TODO: Test using a QSearch for static evaluation instead of a straight eval
 // TODO: Test for timeout above move loop
 // TODO: LMP (again lol, try using altair for reference)
-// TODO: Test removing the Take(12) and just bake the extra 4 "dead" bytes into the array then multiply square by 16 instead of 12 to account for it
 
 public class MyBot : IChessBot
 {
@@ -208,12 +207,6 @@ public class MyBot : IChessBot
                 // Extended futility pruning
                 // Can only prune when at lower depth and behind in evaluation by a large margin
                 canFPrune = depth <= 8 && staticEval + depth * 141 <= alpha;
-
-                // Razoring (reduce depth if up a significant margin at depth 3)
-                /*
-                if (depth == 3 && staticEval + 620 <= alpha)
-                    depth--;
-                */
             }
 
             // Generate appropriate moves depending on whether we're in QSearch
