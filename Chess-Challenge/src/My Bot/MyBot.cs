@@ -126,11 +126,11 @@ public class MyBot : IChessBot
             // Declare some reused variables
             bool inCheck = board.IsInCheck(),
                 canFPrune = false,
-                isRoot = plyFromRoot++ == 0,
+                isNotRoot = plyFromRoot++ != 0,
                 notPV = beta - alpha == 1;
 
             // Draw detection
-            if (!isRoot && board.IsRepeatedPosition())
+            if (isNotRoot && board.IsRepeatedPosition())
                 return 0;
 
             ulong zobristKey = board.ZobristKey;
@@ -157,7 +157,7 @@ public class MyBot : IChessBot
 
             // Transposition table lookup -> Found a valid entry for this position
             // Avoid retrieving mate scores from the TT since they aren't accurate to the ply
-            if (entryKey == zobristKey && !isRoot && entryDepth >= depth && Math.Abs(entryScore) < 50000 && (
+            if (entryKey == zobristKey && isNotRoot && entryDepth >= depth && Math.Abs(entryScore) < 50000 && (
                     // Exact
                     entryFlag == 1 ||
                     // Upperbound
@@ -296,7 +296,7 @@ public class MyBot : IChessBot
                         newTTFlag = 1;
 
                         // Update the root move
-                        if (isRoot)
+                        if (!isNotRoot)
                             rootMove = move;
                     }
 
