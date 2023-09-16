@@ -1,6 +1,6 @@
 ﻿// Tyrant's Engine
 // Version 8.6
-// Current token count 
+// Current token count: 1016
 // Created for Sebastian Lague's Tiny Chess Bots challenge and competition
 //
 // Special thanks to:
@@ -10,7 +10,7 @@
 // 
 
 
-#define DEBUG
+//#define DEBUG
 
 using ChessChallenge.API;
 using System;
@@ -34,7 +34,7 @@ public class MyBot : IChessBot
                                   MoveScores = new int[218],
 
     // Big table packed with data from premade piece square tables
-    // Access using using PackedEvaluationTables[square * 12 + pieceType] = score
+    // Access using using PackedEvaluationTables[square * 16 + pieceType] = score
     UnpackedPestoTables = 
         new[] {
             59445390105436474986072674560m, 70290677894333901267150682880m, 71539517137735599738519086336m, 78957476706409475571971323392m, 76477941479143404670656189696m, 78020492916263816717520067072m, 77059410983631195892660944640m, 61307098105356489251813834752m,
@@ -47,6 +47,7 @@ public class MyBot : IChessBot
             64062225663112462441888793856m, 67159522168020586196575185664m, 71185268483909686702087266048m, 75814236297773358797609495296m, 69944882517184684696171572480m, 74895414840161820695659345152m, 69305332238573146615004392448m, 63422661310571918454614119936m,
         }.SelectMany(packedTable =>
         decimal.GetBits(packedTable).SelectMany(BitConverter.GetBytes)
+                    // No point in only taking 12 bytes. Since we never access the last 4 anyway, we can just leave them as garbage
                     .Select((square, index) => (int)((sbyte)square * 1.461) + PieceValues[index % 12])
                 .ToArray()
         ).ToArray();
