@@ -4,7 +4,7 @@
 // Created for Sebastian Lague's Tiny Chess Bots challenge and competition
 //
 // Special thanks to:
-// Cmndr, Tisajokt, Jw1912, Cj5716, Antares, Toanth, Ciekce, Gedas, Broxholme, A_randomnoob, Waterwall,
+// Cmndr, Tisajokt, Jw1912, Cj5716, Antares, Toanth, Ciekce, Gedas, Broxholme, A_randomnoob, Waterwall, Atad, 
 // and many others who have helped me learn and grow during this challenge
 // 
 // 
@@ -25,6 +25,7 @@ using System.Linq;
 // TODO: Test for timeout above move loop
 // TODO: LMP (again lol, try using altair for reference)
 // TODO: Aspiration windows with increasing delta
+// TODO: Test promotion ordering again
 
 public class MyBot : IChessBot
 {
@@ -88,6 +89,7 @@ public class MyBot : IChessBot
             // Progressively increase search depth, starting from 2
             depth = 2, alpha = -999999, beta = 999999, eval;
 
+        // Iterative deepening loop
         for (;;)
         {
             eval = PVS(depth, alpha, beta, 0, true);
@@ -213,7 +215,7 @@ public class MyBot : IChessBot
                 {
                     board.ForceSkipTurn();
 
-                    // TODO: Play with values: Try a max of 4 instead of 6
+                    // TODO: Play with values: Try a max of 4 or 5 instead of 6
                     Search(beta, 3 + depth / 4 + Math.Min(6, (staticEval - beta) / 175), false);
                     board.UndoSkipTurn();
 
@@ -245,7 +247,7 @@ public class MyBot : IChessBot
 
             MoveScores.AsSpan(0, moveSpan.Length).Sort(moveSpan);
 
-            Move bestMove = default;
+            Move bestMove = entryMove;
             foreach (Move move in moveSpan)
             {
                 // Out of time -> hard bound exceeded
@@ -323,7 +325,7 @@ public class MyBot : IChessBot
             // Transposition table insertion
             transpositionTable[zobristKey & 0x3FFFFF] = (
                 zobristKey,
-                bestMove == default ? entryMove : bestMove,
+                bestMove,
                 bestEval,
                 depth,
                 newTTFlag);
