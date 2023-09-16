@@ -1,8 +1,16 @@
 ﻿// Tyrant's Engine
-// Version 8.5
+// Version 8.6
+// Current token count 
 // Created for Sebastian Lague's Tiny Chess Bots challenge and competition
+//
+// Special thanks to:
+// Cmndr, Tisajokt, Jw1912, Cj5716, Antares, Toanth, Ciekce, Gedas, Broxholme, A_randomnoob, Waterwall,
+// and many others who have helped me learn and grow during this challenge
+// 
+// 
 
-//#define DEBUG
+
+#define DEBUG
 
 using ChessChallenge.API;
 using System;
@@ -14,9 +22,9 @@ using System.Linq;
 // TODO: SPRT the beta check for PVS before full search
 // TODO: Change around how unpacking PeSTO tables works
 //    -> bake differences between middlegame and endgame piece values into the squares themselves and just add a base piece value
-// TODO: Test using a QSearch for static evaluation instead of a straight eval
 // TODO: Test for timeout above move loop
 // TODO: LMP (again lol, try using altair for reference)
+// TODO: Aspiration windows with increasing delta
 
 public class MyBot : IChessBot
 {
@@ -38,7 +46,7 @@ public class MyBot : IChessBot
             70256775951642154667751105509m, 76139418398446961904222530552m, 78919952506429230065925355250m, 2485617727604605227028709358m, 3105768375617668305352130555m, 1225874429600076432248013062m, 76410151742261424234463229975m, 72367527118297610444645922550m,
             64062225663112462441888793856m, 67159522168020586196575185664m, 71185268483909686702087266048m, 75814236297773358797609495296m, 69944882517184684696171572480m, 74895414840161820695659345152m, 69305332238573146615004392448m, 63422661310571918454614119936m,
         }.SelectMany(packedTable =>
-        new System.Numerics.BigInteger(packedTable).ToByteArray().Take(12) 
+        decimal.GetBits(packedTable).SelectMany(BitConverter.GetBytes)
                     .Select((square, index) => (int)((sbyte)square * 1.461) + PieceValues[index % 12])
                 .ToArray()
         ).ToArray();
@@ -157,7 +165,7 @@ public class MyBot : IChessBot
             if (inCheck)
                 depth++;
 
-            // TODO: Look into Broxholmes' suggestion
+            // TODO: Look into Broxholme's suggestion for TT pruning
 
             // Transposition table lookup -> Found a valid entry for this position
             // Avoid retrieving mate scores from the TT since they aren't accurate to the ply
@@ -169,6 +177,12 @@ public class MyBot : IChessBot
                     // Lowerbound
                     entryFlag == 3 && entryScore >= beta))
                 return entryScore;
+
+            // Internal Iterative Reductions
+            /*
+            if (entryMove == default && depth > 4)
+                depth--;
+            */
 
             // Declare QSearch status here to prevent dropping into QSearch while in check
             bool inQSearch = depth <= 0;
@@ -329,8 +343,8 @@ public class MyBot : IChessBot
 
                         // Material and square evaluation
                         square = BitboardHelper.ClearAndGetIndexOfLSB(ref mask) ^ 56 * sideToMove;
-                        middlegame += UnpackedPestoTables[square * 12 + piece];
-                        endgame += UnpackedPestoTables[square * 12 + piece + 6];
+                        middlegame += UnpackedPestoTables[square * 16 + piece];
+                        endgame += UnpackedPestoTables[square * 16 + piece + 6];
 
                         // Bishop pair bonus
                         if (piece == 2 && mask != 0)

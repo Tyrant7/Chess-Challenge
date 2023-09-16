@@ -23,7 +23,6 @@ public class EvilBot : IChessBot
             64062225663112462441888793856m, 67159522168020586196575185664m, 71185268483909686702087266048m, 75814236297773358797609495296m, 69944882517184684696171572480m, 74895414840161820695659345152m, 69305332238573146615004392448m, 63422661310571918454614119936m,
         }.SelectMany(packedTable =>
         new System.Numerics.BigInteger(packedTable).ToByteArray().Take(12)
-                    // Using search max time since it's an integer than initializes to zero and is assgined before being used again 
                     .Select((square, index) => (int)((sbyte)square * 1.461) + PieceValues[index % 12])
                 .ToArray()
         ).ToArray();
@@ -141,8 +140,13 @@ public class EvilBot : IChessBot
             // Check extensions
             if (inCheck)
                 depth++;
+            // Internal Iterative Reductions
+            /*
+            else if (depth >= 5 && entryMove == default)
+                depth--;
+            */
 
-            // TODO: Look into Broxholmes' suggestion
+            // TODO: Look into Broxholme's suggestion for TT pruning
 
             // Transposition table lookup -> Found a valid entry for this position
             // Avoid retrieving mate scores from the TT since they aren't accurate to the ply
@@ -195,12 +199,6 @@ public class EvilBot : IChessBot
                 // Extended futility pruning
                 // Can only prune when at lower depth and behind in evaluation by a large margin
                 canFPrune = depth <= 8 && staticEval + depth * 141 <= alpha;
-
-                // Razoring (reduce depth if up a significant margin at depth 3)
-                /*
-                if (depth == 3 && staticEval + 620 <= alpha)
-                    depth--;
-                */
             }
 
             // Generate appropriate moves depending on whether we're in QSearch
@@ -237,15 +235,9 @@ public class EvilBot : IChessBot
 
                 board.MakeMove(move);
 
-                //////////////////////////////////////////////////////
-                ////                                              ////
-                ////                                              ////
-                ////     [You're about to see some terrible]      ////
-                //// [disgusting syntax that saves a few tokens]  ////
-                ////                                              ////
-                ////                                              ////
-                ////                                              ////
-                //////////////////////////////////////////////////////
+                //
+                // Ugly syntax warning
+                //
 
                 // LMR + PVS
                 // Do a full window search if haven't tried any moves or in QSearch
@@ -255,7 +247,7 @@ public class EvilBot : IChessBot
                     (movesTried < 6 || depth < 2 ||
 
                         // If reduction is applicable do a reduced search with a null window
-                        (Search(alpha + 1, 1 + movesTried / 13 + depth / 9 + Convert.ToInt32(notPV)) > alpha)) &&
+                        (Search(alpha + 1, 1 + Convert.ToInt32(notPV) + movesTried / 13 + depth / 9) > alpha)) &&
 
                         // If alpha was above threshold after reduced search, or didn't match reduction conditions,
                         // update eval with a search with a null window
@@ -264,14 +256,6 @@ public class EvilBot : IChessBot
                     // We either raised alpha on the null window search, or haven't searched yet,
                     // -> research with no null window
                     Search(beta);
-
-                //////////////////////////////////////////////
-                ////                                      ////
-                ////       [~ Exiting syntax hell ~]      ////
-                ////           [Or so you think]          ////
-                ////                                      ////
-                ////                                      ////
-                //////////////////////////////////////////////
 
                 board.UndoMove(move);
 
