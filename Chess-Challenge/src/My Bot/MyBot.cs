@@ -1,4 +1,8 @@
-﻿#define DEBUG
+﻿// Tyrant's Engine
+// Version 8.5
+// Created for Sebastian Lague's Tiny Chess Bots challenge and competition
+
+//#define DEBUG
 
 using ChessChallenge.API;
 using System;
@@ -34,8 +38,7 @@ public class MyBot : IChessBot
             70256775951642154667751105509m, 76139418398446961904222530552m, 78919952506429230065925355250m, 2485617727604605227028709358m, 3105768375617668305352130555m, 1225874429600076432248013062m, 76410151742261424234463229975m, 72367527118297610444645922550m,
             64062225663112462441888793856m, 67159522168020586196575185664m, 71185268483909686702087266048m, 75814236297773358797609495296m, 69944882517184684696171572480m, 74895414840161820695659345152m, 69305332238573146615004392448m, 63422661310571918454614119936m,
         }.SelectMany(packedTable =>
-        new System.Numerics.BigInteger(packedTable).ToByteArray().Take(12)
-                    // Using search max time since it's an integer than initializes to zero and is assgined before being used again 
+        new System.Numerics.BigInteger(packedTable).ToByteArray().Take(12) 
                     .Select((square, index) => (int)((sbyte)square * 1.461) + PieceValues[index % 12])
                 .ToArray()
         ).ToArray();
@@ -243,15 +246,9 @@ public class MyBot : IChessBot
 
                 board.MakeMove(move);
 
-                //////////////////////////////////////////////////////
-                ////                                              ////
-                ////                                              ////
-                ////     [You're about to see some terrible]      ////
-                //// [disgusting syntax that saves a few tokens]  ////
-                ////                                              ////
-                ////                                              ////
-                ////                                              ////
-                //////////////////////////////////////////////////////
+                //
+                // Ugly syntax warning
+                //
 
                 // LMR + PVS
                 // Do a full window search if haven't tried any moves or in QSearch
@@ -261,7 +258,7 @@ public class MyBot : IChessBot
                     (movesTried < 6 || depth < 2 ||
 
                         // If reduction is applicable do a reduced search with a null window
-                        (Search(alpha + 1, 1 + movesTried / 13 + depth / 9 + Convert.ToInt32(notPV)) > alpha)) &&
+                        (Search(alpha + 1, (notPV ? 2 : 1) + movesTried / 13 + depth / 9) > alpha)) &&
 
                         // If alpha was above threshold after reduced search, or didn't match reduction conditions,
                         // update eval with a search with a null window
@@ -270,14 +267,6 @@ public class MyBot : IChessBot
                     // We either raised alpha on the null window search, or haven't searched yet,
                     // -> research with no null window
                     Search(beta);
-
-                //////////////////////////////////////////////
-                ////                                      ////
-                ////       [~ Exiting syntax hell ~]      ////
-                ////           [Or so you think]          ////
-                ////                                      ////
-                ////                                      ////
-                //////////////////////////////////////////////
 
                 board.UndoMove(move);
 
