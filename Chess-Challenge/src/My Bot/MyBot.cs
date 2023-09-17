@@ -168,7 +168,7 @@ public class MyBot : IChessBot
             if (inCheck)
                 depth++;
 
-            // TODO: Look into Broxholme's suggestion for TT pruning
+            // TODO: Look into Broxholme's suggestion for TT pruning (or CJ's, use the NN bot for reference)
 
             // Transposition table lookup -> Found a valid entry for this position
             // Avoid retrieving mate scores from the TT since they aren't accurate to the ply
@@ -260,6 +260,16 @@ public class MyBot : IChessBot
                 // Futility pruning
                 if (canFPrune && !(movesTried == 0 || move.IsCapture || move.IsPromotion))
                     continue;
+
+                // Ciekce's LMP
+                /*
+                if (quiet or losing capture
+                    && best score is not mated
+                    && !pv
+                    && depth <= 8
+                    && legal moves made >= 3 + depth * depth / (improving ? 1 : 2))
+                    break;
+                */
 
                 board.MakeMove(move);
 
