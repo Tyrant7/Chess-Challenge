@@ -10,7 +10,7 @@ public class EvilBot : IChessBot
                                   MoveScores = new int[218],
 
     // Big table packed with data from premade piece square tables
-    // Access using using PackedEvaluationTables[square * 12 + pieceType] = score
+    // Access using using PackedEvaluationTables[square * 16 + pieceType] = score
     UnpackedPestoTables =
         new[] {
             59445390105436474986072674560m, 70290677894333901267150682880m, 71539517137735599738519086336m, 78957476706409475571971323392m, 76477941479143404670656189696m, 78020492916263816717520067072m, 77059410983631195892660944640m, 61307098105356489251813834752m,
@@ -22,7 +22,8 @@ public class EvilBot : IChessBot
             70256775951642154667751105509m, 76139418398446961904222530552m, 78919952506429230065925355250m, 2485617727604605227028709358m, 3105768375617668305352130555m, 1225874429600076432248013062m, 76410151742261424234463229975m, 72367527118297610444645922550m,
             64062225663112462441888793856m, 67159522168020586196575185664m, 71185268483909686702087266048m, 75814236297773358797609495296m, 69944882517184684696171572480m, 74895414840161820695659345152m, 69305332238573146615004392448m, 63422661310571918454614119936m,
         }.SelectMany(packedTable =>
-        new System.Numerics.BigInteger(packedTable).ToByteArray().Take(12)
+        decimal.GetBits(packedTable).SelectMany(BitConverter.GetBytes)
+                    // No point in only taking 12 bytes. Since we never access the last 4 anyway, we can just leave them as garbage
                     .Select((square, index) => (int)((sbyte)square * 1.461) + PieceValues[index % 12])
                 .ToArray()
         ).ToArray();
@@ -55,14 +56,15 @@ public class EvilBot : IChessBot
         nodes = 0;
 #endif
 
-        // Reset history tables
-        var historyHeuristics = new int[2, 7, 64];
+        // Reset history tables (thank you, Broxholme for this approach at history)
+        var historyHeuristics = new int[65536];
 
         // 1/13th of our remaining time, split among all of the moves
         int searchMaxTime = timer.MillisecondsRemaining / 13,
             // Progressively increase search depth, starting from 2
             depth = 2, alpha = -999999, beta = 999999, eval;
 
+        // Iterative deepening loop
         for (; ; )
         {
             eval = PVS(depth, alpha, beta, 0, true);
@@ -140,13 +142,8 @@ public class EvilBot : IChessBot
             // Check extensions
             if (inCheck)
                 depth++;
-            // Internal Iterative Reductions
-            /*
-            else if (depth >= 5 && entryMove == default)
-                depth--;
-            */
 
-            // TODO: Look into Broxholme's suggestion for TT pruning
+            // TODO: Look into Broxholme's suggestion for TT pruning (or CJ's, use the NN bot for reference)
 
             // Transposition table lookup -> Found a valid entry for this position
             // Avoid retrieving mate scores from the TT since they aren't accurate to the ply
@@ -158,6 +155,12 @@ public class EvilBot : IChessBot
                     // Lowerbound
                     entryFlag == 3 && entryScore >= beta))
                 return entryScore;
+
+            // Internal Iterative Reductions
+            /*
+            if (entryMove == default && depth > 4)
+                depth--;
+            */
 
             // Declare QSearch status here to prevent dropping into QSearch while in check
             bool inQSearch = depth <= 0;
@@ -187,7 +190,7 @@ public class EvilBot : IChessBot
                 {
                     board.ForceSkipTurn();
 
-                    // TODO: Play with values: Try a max of 4 instead of 6
+                    // TODO: Play with values: Try a max of 4 or 5 instead of 6
                     Search(beta, 3 + depth / 4 + Math.Min(6, (staticEval - beta) / 175), false);
                     board.UndoSkipTurn();
 
@@ -210,16 +213,18 @@ public class EvilBot : IChessBot
                 MoveScores[movesScored++] = -(
                 // Hash move
                 move == entryMove ? 9_000_000 :
+                // Promotions
+                // move.IsPromotion ? 8_000_000 : 
                 // MVVLVA
                 move.IsCapture ? 1_000_000 * (int)move.CapturePieceType - (int)move.MovePieceType :
                 // Killers
                 killers[plyFromRoot] == move ? 900_000 :
                 // History
-                historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index]);
+                historyHeuristics[move.RawValue]);
 
             MoveScores.AsSpan(0, moveSpan.Length).Sort(moveSpan);
 
-            Move bestMove = default;
+            Move bestMove = entryMove;
             foreach (Move move in moveSpan)
             {
                 // Out of time -> hard bound exceeded
@@ -232,6 +237,16 @@ public class EvilBot : IChessBot
                 // Futility pruning
                 if (canFPrune && !(movesTried == 0 || move.IsCapture || move.IsPromotion))
                     continue;
+
+                // Ciekce's LMP
+                /*
+                if (quiet or losing capture
+                    && best score is not mated
+                    && !pv
+                    && depth <= 8
+                    && legal moves made >= 3 + depth * depth / (improving ? 1 : 2))
+                    break;
+                */
 
                 board.MakeMove(move);
 
@@ -247,7 +262,7 @@ public class EvilBot : IChessBot
                     (movesTried < 6 || depth < 2 ||
 
                         // If reduction is applicable do a reduced search with a null window
-                        (Search(alpha + 1, 1 + Convert.ToInt32(notPV) + movesTried / 13 + depth / 9) > alpha)) &&
+                        (Search(alpha + 1, (notPV ? 2 : 1) + movesTried / 13 + depth / 9) > alpha)) &&
 
                         // If alpha was above threshold after reduced search, or didn't match reduction conditions,
                         // update eval with a search with a null window
@@ -279,7 +294,11 @@ public class EvilBot : IChessBot
                         // Update history tables
                         if (!move.IsCapture)
                         {
-                            historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index] += depth * depth;
+                            // Note:
+                            // This will possibly mess up ordering on promotions due to them having different key values in the array,
+                            // but the history relying on the information of from->to,
+                            // So far I have not found it worth adding promotion ordering, but be aware of that
+                            historyHeuristics[move.RawValue] += depth * depth;
                             killers[plyFromRoot] = move;
                         }
                         newTTFlag = 3;
@@ -297,7 +316,7 @@ public class EvilBot : IChessBot
             // Transposition table insertion
             transpositionTable[zobristKey & 0x3FFFFF] = (
                 zobristKey,
-                bestMove == default ? entryMove : bestMove,
+                bestMove,
                 bestEval,
                 depth,
                 newTTFlag);
@@ -318,8 +337,8 @@ public class EvilBot : IChessBot
 
                         // Material and square evaluation
                         square = BitboardHelper.ClearAndGetIndexOfLSB(ref mask) ^ 56 * sideToMove;
-                        middlegame += UnpackedPestoTables[square * 12 + piece];
-                        endgame += UnpackedPestoTables[square * 12 + piece + 6];
+                        middlegame += UnpackedPestoTables[square * 16 + piece];
+                        endgame += UnpackedPestoTables[square * 16 + piece + 6];
 
                         // Bishop pair bonus
                         if (piece == 2 && mask != 0)

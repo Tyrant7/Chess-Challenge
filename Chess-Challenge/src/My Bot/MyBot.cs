@@ -25,7 +25,7 @@ using System.Linq;
 // TODO: Test for timeout above move loop
 // TODO: LMP (again lol, try using altair for reference)
 // TODO: Aspiration windows with increasing delta
-// TODO: Test promotion ordering again
+// TODO: Test declaring killers inside of Think to reset them
 
 public class MyBot : IChessBot
 {
@@ -81,8 +81,8 @@ public class MyBot : IChessBot
         nodes = 0;
 #endif
 
-        // Reset history tables
-        var historyHeuristics = new int[2, 7, 64];
+        // Reset history tables (thank you, Broxholme for this approach at history)
+        var historyHeuristics = new int[65536];
 
         // 1/13th of our remaining time, split among all of the moves
         int searchMaxTime = timer.MillisecondsRemaining / 13,
@@ -238,12 +238,14 @@ public class MyBot : IChessBot
                 MoveScores[movesScored++] = -(
                 // Hash move
                 move == entryMove ? 9_000_000 :
+                // Promotions
+                // move.IsPromotion ? 8_000_000 : 
                 // MVVLVA
                 move.IsCapture ? 1_000_000 * (int)move.CapturePieceType - (int)move.MovePieceType :
                 // Killers
                 killers[plyFromRoot] == move ? 900_000 :
                 // History
-                historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index]);
+                historyHeuristics[move.RawValue]);
 
             MoveScores.AsSpan(0, moveSpan.Length).Sort(moveSpan);
 
@@ -317,7 +319,11 @@ public class MyBot : IChessBot
                         // Update history tables
                         if (!move.IsCapture)
                         {
-                            historyHeuristics[plyFromRoot & 1, (int)move.MovePieceType, move.TargetSquare.Index] += depth * depth;
+                            // Note:
+                            // This will possibly mess up ordering on promotions due to them having different key values in the array,
+                            // but the history relying on the information of from->to,
+                            // So far I have not found it worth adding promotion ordering, but be aware of that
+                            historyHeuristics[move.RawValue] += depth * depth;
                             killers[plyFromRoot] = move;
                         }
                         newTTFlag = 3;
