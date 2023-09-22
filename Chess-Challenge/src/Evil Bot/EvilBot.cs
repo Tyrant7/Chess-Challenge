@@ -147,7 +147,7 @@ public class EvilBot : IChessBot
 
             // Transposition table lookup -> Found a valid entry for this position
             // Avoid retrieving mate scores from the TT since they aren't accurate to the ply
-            if (entryKey == zobristKey && notRoot && entryDepth >= depth && Math.Abs(entryScore) < 50000 && (
+            if (entryKey == zobristKey && notPV && entryDepth >= depth && Math.Abs(entryScore) < 50000 && (
                     // Exact
                     entryFlag == 1 ||
                     // Upperbound
@@ -190,7 +190,7 @@ public class EvilBot : IChessBot
                 {
                     board.ForceSkipTurn();
 
-                    // TODO: Play with values: Try a max of 4 or 5 instead of 6
+                    // TODO: Play with values: Try a max of 4 or 5 instead of 6 along with a different divisor
                     Search(beta, 3 + depth / 4 + Math.Min(6, (staticEval - beta) / 175), false);
                     board.UndoSkipTurn();
 
@@ -354,6 +354,15 @@ public class EvilBot : IChessBot
                             endgame -= 15;
                         }
 
+                        // Open file bonus
+                        /*
+                        if (piece == 3 && BitboardHelper.GetNumberOfSetBits(0x101010101010101UL << (square & 7) & board.AllPiecesBitboard) == 1)
+                        {
+                            middlegame += 25;
+                            endgame += 9;
+                        }
+                        */
+
                         // Semi-open file bonus for rooks
                         if (piece == 3 && (0x101010101010101UL << (square & 7) & board.GetPieceBitboard(PieceType.Pawn, sideToMove > 0)) == 0)
                         {
@@ -361,14 +370,14 @@ public class EvilBot : IChessBot
                             endgame += 10;
                         }
 
-                        // Mobility bonus (+15 elo alone)
+                        // Mobility bonus
                         /*
                         if (piece >= 2 && piece <= 4)
                         {
-                            int bonus = BitboardHelper.GetNumberOfSetBits(
-                                BitboardHelper.GetPieceAttacks((PieceType)piece + 1, new Square(square ^ 56 * sideToMove), board, sideToMove > 0));
-                            middlegame += bonus;
-                            endgame += bonus * 2;
+                            double bonus = BitboardHelper.GetNumberOfSetBits(
+                                BitboardHelper.GetPieceAttacks((PieceType)piece + 1, new Square(square ^ 56 * sideToMove), board, false));
+                            middlegame += (int)(bonus * 5.23745);
+                            endgame += (int)(bonus * 4.25251);
                         }
                         */
                     }

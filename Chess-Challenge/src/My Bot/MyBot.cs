@@ -171,7 +171,7 @@ public class MyBot : IChessBot
 
             // Transposition table lookup -> Found a valid entry for this position
             // Avoid retrieving mate scores from the TT since they aren't accurate to the ply
-            if (entryKey == zobristKey && notRoot && entryDepth >= depth && Math.Abs(entryScore) < 50000 && (
+            if (entryKey == zobristKey && notPV && entryDepth >= depth && Math.Abs(entryScore) < 50000 && (
                     // Exact
                     entryFlag == 1 ||
                     // Upperbound
@@ -214,7 +214,7 @@ public class MyBot : IChessBot
                 {
                     board.ForceSkipTurn();
 
-                    // TODO: Play with values: Try a max of 4 or 5 instead of 6
+                    // TODO: Play with values: Try a max of 4 or 5 instead of 6 along with a different divisor
                     Search(beta, 3 + depth / 4 + Math.Min(6, (staticEval - beta) / 175), false);
                     board.UndoSkipTurn();
 
