@@ -354,14 +354,12 @@ public class EvilBot : IChessBot
                             endgame -= 15;
                         }
 
-                        // Semi-open file bonus for rooks (+14.6 elo alone)
-                        /*
+                        // Semi-open file bonus for rooks
                         if (piece == 3 && (0x101010101010101UL << (square & 7) & board.GetPieceBitboard(PieceType.Pawn, sideToMove > 0)) == 0)
                         {
                             middlegame += 13;
                             endgame += 10;
                         }
-                        */
 
                         // Mobility bonus (+15 elo alone)
                         /*

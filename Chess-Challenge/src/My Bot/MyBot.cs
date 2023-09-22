@@ -4,13 +4,13 @@
 // Created for Sebastian Lague's Tiny Chess Bots challenge and competition
 //
 // Special thanks to:
-// Cmndr, Tisajokt, Jw1912, Cj5716, Antares, Toanth, Ciekce, Gedas, Broxholme, A_randomnoob, Waterwall, Atad, 
+// Cmndr, Tisajokt, Jw1912, Cj5716, Antares, Toanth, Ciekce, Gedas, Broxholme, A_randomnoob, Waterwall, Atad, Montessori
 // and many others who have helped me learn and grow during this challenge
 // 
 // 
 
 
-//#define DEBUG
+// #define DEBUG
 
 using ChessChallenge.API;
 using System;
@@ -18,14 +18,13 @@ using System.Linq;
 
 // TODO: IMPORTANT: Get a real opening book
 // TODO: Retune eval using Gedas' tuner now that it has stacked pawn evaluation
-// TODO: Play with values for dynamic NMP
 // TODO: SPRT the beta check for PVS before full search
 // TODO: Change around how unpacking PeSTO tables works
 //    -> bake differences between middlegame and endgame piece values into the squares themselves and just add a base piece value
 // TODO: Test for timeout above move loop
 // TODO: LMP (again lol, try using altair for reference)
 // TODO: Aspiration windows with increasing delta
-// TODO: Test declaring killers inside of Think to reset them
+// TODO: Test Antares' token saves for QSearch
 
 public class MyBot : IChessBot
 {
@@ -379,23 +378,30 @@ public class MyBot : IChessBot
                             endgame -= 15;
                         }
 
-                        // Semi-open file bonus for rooks (+14.6 elo alone)
+                        // Open file bonus
                         /*
+                        if (piece == 3 && BitboardHelper.GetNumberOfSetBits(0x101010101010101UL << (square & 7) & board.AllPiecesBitboard) == 1)
+                        {
+                            middlegame += 25;
+                            endgame += 9;
+                        }
+                        */
+
+                        // Semi-open file bonus for rooks
                         if (piece == 3 && (0x101010101010101UL << (square & 7) & board.GetPieceBitboard(PieceType.Pawn, sideToMove > 0)) == 0)
                         {
                             middlegame += 13;
                             endgame += 10;
                         }
-                        */
 
-                        // Mobility bonus (+15 elo alone)
+                        // Mobility bonus
                         /*
                         if (piece >= 2 && piece <= 4)
                         {
-                            int bonus = BitboardHelper.GetNumberOfSetBits(
-                                BitboardHelper.GetPieceAttacks((PieceType)piece + 1, new Square(square ^ 56 * sideToMove), board, sideToMove > 0));
-                            middlegame += bonus;
-                            endgame += bonus * 2;
+                            double bonus = BitboardHelper.GetNumberOfSetBits(
+                                BitboardHelper.GetPieceAttacks((PieceType)piece + 1, new Square(square ^ 56 * sideToMove), board, false));
+                            middlegame += (int)(bonus * 5.23745);
+                            endgame += (int)(bonus * 4.25251);
                         }
                         */
                     }
