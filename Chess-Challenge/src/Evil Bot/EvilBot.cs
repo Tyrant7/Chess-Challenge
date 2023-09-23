@@ -73,12 +73,13 @@ public class EvilBot : IChessBot
             if (timer.MillisecondsElapsedThisTurn > searchMaxTime / 3)
                 return rootMove;
 
-            // Gradual widening
-            // Fell outside window, retry with wider window search
-            if (eval <= alpha)
-                alpha -= 62;
-            else if (eval >= beta)
-                beta += 62;
+            // Fell outside window, retry with a full window search
+            // (more token efficient than gradual widening, without any elo loss)
+            if (eval <= alpha || eval >= beta)
+            {
+                alpha -= 999999;
+                beta += 999999;
+            }
             else
             {
 #if DEBUG
