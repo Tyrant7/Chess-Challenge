@@ -144,17 +144,14 @@ public class EvilBot : IChessBot
             if (inCheck)
                 depth++;
 
-            // TODO: Look into Broxholme's suggestion for TT pruning (or CJ's, use the NN bot for reference)
-
             // Transposition table lookup -> Found a valid entry for this position
             // Avoid retrieving mate scores from the TT since they aren't accurate to the ply
-            if (entryKey == zobristKey && notPV && entryDepth >= depth && Math.Abs(entryScore) < 50000 && (
-                    // Exact
-                    entryFlag == 1 ||
-                    // Upperbound
-                    entryFlag == 2 && entryScore <= alpha ||
+            // No need for EXACT flag if we just invert some conditions. Thank you Broxholme for this suggestion
+            if (entryKey == zobristKey && notPV && entryDepth >= depth && Math.Abs(entryScore) < 50000 &&
                     // Lowerbound
-                    entryFlag == 3 && entryScore >= beta))
+                    entryFlag != 3 | entryScore >= beta &&
+                    // Upperbound
+                    entryFlag != 2 | entryScore <= alpha)
                 return entryScore;
 
             // Internal Iterative Reductions

@@ -1,5 +1,5 @@
 ﻿// Tyrant's Engine
-// Version 8.6
+// Version 8.8
 // Current token count: 1016
 // Created for Sebastian Lague's Tiny Chess Bots challenge and competition
 //
@@ -10,7 +10,7 @@
 // 
 
 
-#define DEBUG
+// #define DEBUG
 
 using ChessChallenge.API;
 using System;
@@ -19,12 +19,13 @@ using System.Linq;
 // TODO: IMPORTANT: Get a real opening book
 // TODO: Retune eval using Gedas' tuner now that it has stacked pawn evaluation
 // TODO: SPRT the beta check for PVS before full search
-// TODO: Change around how unpacking PeSTO tables works
-//    -> bake differences between middlegame and endgame piece values into the squares themselves and just add a base piece value
 // TODO: Test for timeout above move loop
-// TODO: LMP (again lol, try using altair for reference)
 // TODO: Aspiration windows with increasing delta
 // TODO: Test Antares' token saves for QSearch
+// TODO: Try to get a variable movesTried margin working in LMR 
+// TODO: OR try to get evaluation based LMR up and running (but that's quite a stretch for only 9 tokens)
+// TODO: See if I can token optimize using the | or instead of || or assigning with equals inside of comparisons
+// TODO: Add using static Math to save a token or three
 
 public class MyBot : IChessBot
 {
@@ -168,17 +169,14 @@ public class MyBot : IChessBot
             if (inCheck)
                 depth++;
 
-            // TODO: Look into Broxholme's suggestion for TT pruning (or CJ's, use the NN bot for reference)
-
             // Transposition table lookup -> Found a valid entry for this position
             // Avoid retrieving mate scores from the TT since they aren't accurate to the ply
-            if (entryKey == zobristKey && notPV && entryDepth >= depth && Math.Abs(entryScore) < 50000 && (
-                    // Exact
-                    entryFlag == 1 ||
-                    // Upperbound
-                    entryFlag == 2 && entryScore <= alpha ||
+            // No need for EXACT flag if we just invert some conditions. Thank you Broxholme for this suggestion
+            if (entryKey == zobristKey && notPV && entryDepth >= depth && Math.Abs(entryScore) < 50000 &&
                     // Lowerbound
-                    entryFlag == 3 && entryScore >= beta))
+                    entryFlag != 3 | entryScore >= beta &&
+                    // Upperbound
+                    entryFlag != 2 | entryScore <= alpha)
                 return entryScore;
 
             // Internal Iterative Reductions
