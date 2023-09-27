@@ -17,15 +17,11 @@ using System;
 using System.Linq;
 
 // TODO: IMPORTANT: Get a real opening book
-// TODO: Retune eval using Gedas' tuner now that it has stacked pawn evaluation
-// TODO: SPRT the beta check for PVS before full search
 // TODO: Test for timeout above move loop
-// TODO: Aspiration windows with increasing delta
 // TODO: Test Antares' token saves for QSearch
 // TODO: Try to get a variable movesTried margin working in LMR 
-// TODO: OR try to get evaluation based LMR up and running (but that's quite a stretch for only 9 tokens)
 // TODO: See if I can token optimize using the | or instead of || or assigning with equals inside of comparisons
-// TODO: Add using static Math to save a token or three
+// TODO: Add using static Math to save a token
 
 public class MyBot : IChessBot
 {
@@ -165,6 +161,12 @@ public class MyBot : IChessBot
             //
             //
 
+            // Internal iterative reductions
+            /*
+            if (!notPV && depth >= 4 && entryMove == default)
+                depth--;
+            */
+
             // Check extensions
             if (inCheck)
                 depth++;
@@ -178,12 +180,6 @@ public class MyBot : IChessBot
                     // Upperbound
                     entryFlag != 2 | entryScore <= alpha)
                 return entryScore;
-
-            // Internal Iterative Reductions
-            /*
-            if (entryMove == default && depth > 4)
-                depth--;
-            */
 
             // Declare QSearch status here to prevent dropping into QSearch while in check
             bool inQSearch = depth <= 0;
@@ -237,7 +233,7 @@ public class MyBot : IChessBot
                 // Hash move
                 move == entryMove ? 9_000_000 :
                 // Promotions
-                // move.IsPromotion ? 8_000_000 : 
+                // move.PromotionPieceType == PieceType.Queen ? 8_000_000 :
                 // MVVLVA
                 move.IsCapture ? 1_000_000 * (int)move.CapturePieceType - (int)move.MovePieceType :
                 // Killers
@@ -285,6 +281,7 @@ public class MyBot : IChessBot
                     (movesTried < 6 || depth < 2 ||
 
                         // If reduction is applicable do a reduced search with a null window
+                        // Using Math.Min to ensure we aren't reducing past 0 and straight into QSearch with our LMR
                         (Search(alpha + 1, (notPV ? 2 : 1) + movesTried / 13 + depth / 9) > alpha)) &&
 
                         // If alpha was above threshold after reduced search, or didn't match reduction conditions,
