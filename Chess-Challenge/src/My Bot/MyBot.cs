@@ -19,9 +19,9 @@ using System.Linq;
 // TODO: IMPORTANT: Get a real opening book
 // TODO: Test for timeout above move loop
 // TODO: Test Antares' token saves for QSearch
-// TODO: Try to get a variable movesTried margin working in LMR 
 // TODO: See if I can token optimize using the | or instead of || or assigning with equals inside of comparisons
 // TODO: Add using static Math to save a token
+// TODO: Test removing promotion condition from futility pruning for token save
 
 public class MyBot : IChessBot
 {
@@ -257,16 +257,6 @@ public class MyBot : IChessBot
                 if (canFPrune && !(movesTried == 0 || move.IsCapture || move.IsPromotion))
                     continue;
 
-                // Ciekce's LMP
-                /*
-                if (quiet or losing capture
-                    && best score is not mated
-                    && !pv
-                    && depth <= 8
-                    && legal moves made >= 3 + depth * depth / (improving ? 1 : 2))
-                    break;
-                */
-
                 board.MakeMove(move);
 
                 //
@@ -281,8 +271,8 @@ public class MyBot : IChessBot
                     (movesTried < 6 || depth < 2 ||
 
                         // If reduction is applicable do a reduced search with a null window
-                        // Using Math.Min to ensure we aren't reducing past 0 and straight into QSearch with our LMR
-                        (Search(alpha + 1, (notPV ? 2 : 1) + movesTried / 13 + depth / 9) > alpha)) &&
+                        // TODO: Test removing these brackets
+                        (Search(alpha + 1, Math.Min((notPV ? 2 : 1) + movesTried / 13 + depth / 9, depth)) > alpha)) &&
 
                         // If alpha was above threshold after reduced search, or didn't match reduction conditions,
                         // update eval with a search with a null window

@@ -260,7 +260,7 @@ public class EvilBot : IChessBot
                     (movesTried < 6 || depth < 2 ||
 
                         // If reduction is applicable do a reduced search with a null window
-                        (Search(alpha + 1, (notPV ? 2 : 1) + movesTried / 13 + depth / 9) > alpha)) &&
+                        (Search(alpha + 1, Math.Min((notPV ? 2 : 1) + movesTried / 13 + depth / 9, depth)) > alpha)) &&
 
                         // If alpha was above threshold after reduced search, or didn't match reduction conditions,
                         // update eval with a search with a null window
