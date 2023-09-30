@@ -356,8 +356,12 @@ public class MyBot : IChessBot
                             endgame += 63;
                         }
 
-                        // Doubled pawns penalty (brought to my attention by Y3737)
+                        // Save file
+                        // Flipping the square is irrelevant since the file will stay the same,
+                        // hence no need to flip it back
                         ulong file = 0x101010101010101UL << (square & 7);
+
+                        // Doubled pawns penalty (brought to my attention by Y3737)
                         if (piece == 0 && (file & mask) > 0)
                         {
                             middlegame -= 22;
@@ -391,7 +395,7 @@ public class MyBot : IChessBot
                         }
                         */
                     }
-            return 
+            return
                 (middlegame * gamephase + endgame * (24 - gamephase)) / (board.IsWhiteToMove ? 24 : -24)
             // Tempo bonus to help with aspiration windows
                 + 16;
@@ -403,9 +407,9 @@ public class MyBot : IChessBot
                ...      White vs Black: 1333 - 1308 - 2078  [0.503] 4719
                Elo difference: 11.0 +/- 7.4, LOS: 99.8 %, DrawRatio: 44.0 %
                SPRT: llr 2.96 (100.6%), lbound -2.94, ubound 2.94 - H1 was accepted
-            
-                * (100 - board.FiftyMoveCounter) / 100;
-            */
+
+            * (100 - board.FiftyMoveCounter) / 100;
+                                   */
         }
     }
 }
