@@ -10,7 +10,7 @@
 // 
 
 
-// #define DEBUG
+#define DEBUG
 
 using ChessChallenge.API;
 using System;
@@ -18,10 +18,8 @@ using System.Linq;
 using static System.Math;
 
 // TODO: Test for timeout above move loop
-// TODO: Test Antares' token saves for QSearch
-// TODO: See if I can token optimize using the | or instead of || or assigning with equals inside of comparisons
-// TODO: Test allowing forward pruning if we're in check
 // TODO: Test 50mr with 200 instead of 100 scaling factor
+// TODO: Add continue statement to aspiration windows to save my last token!
 
 public class MyBot : IChessBot
 {
@@ -51,10 +49,9 @@ public class MyBot : IChessBot
 
     // enum Flag
     // {
-    //     0 = Invalid,
-    //     1 = Exact,
-    //     2 = Upperbound,
-    //     3 = Lowerbound
+    //     0  = Lowerbound
+    //     1  = Upperbound,
+    //     >1 = Exact,
     // }
 
     // 0x400000 represents the rough number of entries it would take to fill 256mb
@@ -150,7 +147,7 @@ public class MyBot : IChessBot
 
             // Define best eval all the way up here to generate the standing pattern for QSearch
             int bestEval = -9999999,
-                newTTFlag = 2,
+                newTTFlag = 1, // Upperbound
                 movesTried = 0,
                 movesScored = 0,
                 eval;
@@ -179,9 +176,9 @@ public class MyBot : IChessBot
             // No need for EXACT flag if we just invert some conditions. Thank you Broxholme for this suggestion
             if (entryKey == zobristKey && notPV && entryDepth >= depth | inQSearch && Abs(entryScore) < 50000 &&
                     // Lowerbound
-                    entryFlag != 3 | entryScore >= beta &&
+                    entryFlag != 0 | entryScore >= beta &&
                     // Upperbound
-                    entryFlag != 2 | entryScore <= alpha)
+                    entryFlag != 1 | entryScore <= alpha)
                 return entryScore;
 
             if (inQSearch)
@@ -289,7 +286,10 @@ public class MyBot : IChessBot
                     {
                         alpha = eval;
                         bestMove = move;
-                        newTTFlag = 1;
+
+                        // Increment, since we can raise alpha multiple times,
+                        // Any flag above 1 in treated as an exact flag
+                        newTTFlag++;
 
                         // Update the root move
                         if (!notRoot)
@@ -299,7 +299,8 @@ public class MyBot : IChessBot
                     // Cutoff
                     if (alpha >= beta)
                     {
-                        newTTFlag = 3;
+                        // Lowerbound
+                        newTTFlag = 0;
 
                         // Skip updating history tables if non-quiet
                         if (move.IsCapture)
