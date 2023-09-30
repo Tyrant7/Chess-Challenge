@@ -1,6 +1,6 @@
 ﻿// Tyrant's Engine
-// Version 8.8
-// Current token count: 1015 / 1024
+// Version 8.9
+// Current token count: 1017 / 1024
 // Created for Sebastian Lague's Tiny Chess Bots challenge and competition
 //
 // Special thanks to:
@@ -15,6 +15,7 @@
 using ChessChallenge.API;
 using System;
 using System.Linq;
+using static System.Math;
 
 // TODO: IMPORTANT: Get a real opening book
 // TODO: Test for timeout above move loop
@@ -23,6 +24,7 @@ using System.Linq;
 // TODO: Add using static Math to save a token
 // TODO: Test removing promotion condition from futility pruning for token save
 // TODO: Test allowing forward pruning if we're in check
+// TODO: SPRT declaring MoveScores as non-static to fix the multiple instances error bug
 
 public class MyBot : IChessBot
 {
@@ -106,10 +108,10 @@ public class MyBot : IChessBot
             {
 #if DEBUG
                 string evalWithMate = eval.ToString();
-                if (Math.Abs(eval) > 50000)
+                if (Abs(eval) > 50000)
                 {
                     evalWithMate = eval < 0 ? "-" : "";
-                    evalWithMate += $"M{Math.Ceiling((99998 - Math.Abs((double)eval)) / 2)}";
+                    evalWithMate += $"M{Ceiling((99998 - Abs((double)eval)) / 2)}";
                 }
 
                 Console.WriteLine("Info: depth: {0, 2} || eval: {1, 6} || nodes: {2, 9} || nps: {3, 8} || time: {4, 5}ms || best move: {5}{6}",
@@ -178,7 +180,7 @@ public class MyBot : IChessBot
             // Transposition table lookup -> Found a valid entry for this position
             // Avoid retrieving mate scores from the TT since they aren't accurate to the ply
             // No need for EXACT flag if we just invert some conditions. Thank you Broxholme for this suggestion
-            if (entryKey == zobristKey && notPV && entryDepth >= depth | inQSearch && Math.Abs(entryScore) < 50000 &&
+            if (entryKey == zobristKey && notPV && entryDepth >= depth | inQSearch && Abs(entryScore) < 50000 &&
                     // Lowerbound
                     entryFlag != 3 | entryScore >= beta &&
                     // Upperbound
@@ -191,7 +193,7 @@ public class MyBot : IChessBot
                 bestEval = Evaluate();
                 if (bestEval >= beta)
                     return bestEval;
-                alpha = Math.Max(alpha, bestEval);
+                alpha = Max(alpha, bestEval);
             }
             // No pruning in QSearch
             // Only prune if this node is NOT a candidate for the PV and we're not in check
@@ -212,7 +214,7 @@ public class MyBot : IChessBot
                     board.ForceSkipTurn();
 
                     // TODO: Play with values: Try a max of 4 or 5 instead of 6 along with a different divisor
-                    Search(beta, 3 + depth / 4 + Math.Min(6, (staticEval - beta) / 175), false);
+                    Search(beta, 3 + depth / 4 + Min(6, (staticEval - beta) / 175), false);
                     board.UndoSkipTurn();
 
                     // Failed high on the null move
@@ -274,7 +276,7 @@ public class MyBot : IChessBot
 
                         // If reduction is applicable do a reduced search with a null window
                         // TODO: Test removing these brackets
-                        (Search(alpha + 1, Math.Min((notPV ? 2 : 1) + movesTried / 13 + depth / 9, depth)) > alpha)) &&
+                        Search(alpha + 1, Min((notPV ? 2 : 1) + movesTried / 13 + depth / 9, depth)) > alpha) &&
 
                         // If alpha was above threshold after reduced search, or didn't match reduction conditions,
                         // update eval with a search with a null window
@@ -360,7 +362,8 @@ public class MyBot : IChessBot
                         }
 
                         // Doubled pawns penalty (brought to my attention by Y3737)
-                        if (piece == 0 && (0x101010101010101UL << (square & 7) & mask) > 0)
+                        ulong file = 0x101010101010101UL << (square & 7);
+                        if (piece == 0 && (file & mask) > 0)
                         {
                             middlegame -= 22;
                             endgame -= 35;
@@ -376,7 +379,7 @@ public class MyBot : IChessBot
                         */
 
                         // Semi-open file bonus for rooks
-                        if (piece == 3 && (0x101010101010101UL << (square & 7) & board.GetPieceBitboard(PieceType.Pawn, sideToMove > 0)) == 0)
+                        if (piece == 3 && (file & board.GetPieceBitboard(PieceType.Pawn, sideToMove > 0)) == 0)
                         {
                             middlegame += 29;
                             endgame += 17;
