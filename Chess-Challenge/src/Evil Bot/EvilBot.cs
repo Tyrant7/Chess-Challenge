@@ -140,28 +140,29 @@ public class EvilBot : IChessBot
             //
             //
 
+            // Internal iterative reductions
+            /*
+            if (!notPV && depth >= 4 && entryMove == default)
+                depth--;
+            */
+
             // Check extensions
             if (inCheck)
                 depth++;
 
+            // Declare QSearch status here to prevent dropping into QSearch while in check
+            bool inQSearch = depth <= 0;
+
             // Transposition table lookup -> Found a valid entry for this position
             // Avoid retrieving mate scores from the TT since they aren't accurate to the ply
             // No need for EXACT flag if we just invert some conditions. Thank you Broxholme for this suggestion
-            if (entryKey == zobristKey && notPV && entryDepth >= depth && Math.Abs(entryScore) < 50000 &&
+            if (entryKey == zobristKey && notPV && entryDepth >= depth | inQSearch && Math.Abs(entryScore) < 50000 &&
                     // Lowerbound
                     entryFlag != 3 | entryScore >= beta &&
                     // Upperbound
                     entryFlag != 2 | entryScore <= alpha)
                 return entryScore;
 
-            // Internal Iterative Reductions
-            /*
-            if (entryMove == default && depth > 4)
-                depth--;
-            */
-
-            // Declare QSearch status here to prevent dropping into QSearch while in check
-            bool inQSearch = depth <= 0;
             if (inQSearch)
             {
                 // Determine if quiescence search should be continued
@@ -171,7 +172,7 @@ public class EvilBot : IChessBot
                 alpha = Math.Max(alpha, bestEval);
             }
             // No pruning in QSearch
-            // If this node is NOT part of the PV and we're not in check
+            // Only prune if this node is NOT a candidate for the PV and we're not in check
             else if (notPV && !inCheck)
             {
                 // Reverse futility pruning
@@ -212,7 +213,7 @@ public class EvilBot : IChessBot
                 // Hash move
                 move == entryMove ? 9_000_000 :
                 // Promotions
-                // move.IsPromotion ? 8_000_000 : 
+                // move.PromotionPieceType == PieceType.Queen ? 8_000_000 :
                 // MVVLVA
                 move.IsCapture ? 1_000_000 * (int)move.CapturePieceType - (int)move.MovePieceType :
                 // Killers
@@ -236,16 +237,6 @@ public class EvilBot : IChessBot
                 if (canFPrune && !(movesTried == 0 || move.IsCapture || move.IsPromotion))
                     continue;
 
-                // Ciekce's LMP
-                /*
-                if (quiet or losing capture
-                    && best score is not mated
-                    && !pv
-                    && depth <= 8
-                    && legal moves made >= 3 + depth * depth / (improving ? 1 : 2))
-                    break;
-                */
-
                 board.MakeMove(move);
 
                 //
@@ -260,6 +251,7 @@ public class EvilBot : IChessBot
                     (movesTried < 6 || depth < 2 ||
 
                         // If reduction is applicable do a reduced search with a null window
+                        // TODO: Test removing these brackets
                         (Search(alpha + 1, Math.Min((notPV ? 2 : 1) + movesTried / 13 + depth / 9, depth)) > alpha)) &&
 
                         // If alpha was above threshold after reduced search, or didn't match reduction conditions,

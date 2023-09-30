@@ -22,6 +22,7 @@ using System.Linq;
 // TODO: See if I can token optimize using the | or instead of || or assigning with equals inside of comparisons
 // TODO: Add using static Math to save a token
 // TODO: Test removing promotion condition from futility pruning for token save
+// TODO: Test allowing forward pruning if we're in check
 
 public class MyBot : IChessBot
 {
@@ -171,18 +172,19 @@ public class MyBot : IChessBot
             if (inCheck)
                 depth++;
 
+            // Declare QSearch status here to prevent dropping into QSearch while in check
+            bool inQSearch = depth <= 0;
+
             // Transposition table lookup -> Found a valid entry for this position
             // Avoid retrieving mate scores from the TT since they aren't accurate to the ply
             // No need for EXACT flag if we just invert some conditions. Thank you Broxholme for this suggestion
-            if (entryKey == zobristKey && notPV && entryDepth >= depth && Math.Abs(entryScore) < 50000 &&
+            if (entryKey == zobristKey && notPV && entryDepth >= depth | inQSearch && Math.Abs(entryScore) < 50000 &&
                     // Lowerbound
                     entryFlag != 3 | entryScore >= beta &&
                     // Upperbound
                     entryFlag != 2 | entryScore <= alpha)
                 return entryScore;
 
-            // Declare QSearch status here to prevent dropping into QSearch while in check
-            bool inQSearch = depth <= 0;
             if (inQSearch)
             {
                 // Determine if quiescence search should be continued
@@ -192,7 +194,7 @@ public class MyBot : IChessBot
                 alpha = Math.Max(alpha, bestEval);
             }
             // No pruning in QSearch
-            // If this node is NOT part of the PV and we're not in check
+            // Only prune if this node is NOT a candidate for the PV and we're not in check
             else if (notPV && !inCheck)
             {
                 // Reverse futility pruning
