@@ -17,14 +17,11 @@ using System;
 using System.Linq;
 using static System.Math;
 
-// TODO: IMPORTANT: Get a real opening book
 // TODO: Test for timeout above move loop
 // TODO: Test Antares' token saves for QSearch
 // TODO: See if I can token optimize using the | or instead of || or assigning with equals inside of comparisons
-// TODO: Add using static Math to save a token
-// TODO: Test removing promotion condition from futility pruning for token save
 // TODO: Test allowing forward pruning if we're in check
-// TODO: SPRT declaring MoveScores as non-static to fix the multiple instances error bug
+// TODO: Test 50mr with 200 instead of 100 scaling factor
 
 public class MyBot : IChessBot
 {
@@ -189,7 +186,7 @@ public class MyBot : IChessBot
 
             if (inQSearch)
             {
-                // Determine if quiescence search should be continued
+                // Standpat check -> determine if quiescence search should be continued
                 bestEval = Evaluate();
                 if (bestEval >= beta)
                     return bestEval;
@@ -235,9 +232,7 @@ public class MyBot : IChessBot
             foreach (Move move in moveSpan)
                 MoveScores[movesScored++] = -(
                 // Hash move
-                move == entryMove ? 9_000_000 :
-                // Promotions
-                // move.PromotionPieceType == PieceType.Queen ? 8_000_000 :
+                move == entryMove ? 90_000_000 :
                 // MVVLVA
                 move.IsCapture ? 1_000_000 * (int)move.CapturePieceType - (int)move.MovePieceType :
                 // Killers
@@ -275,7 +270,6 @@ public class MyBot : IChessBot
                     (movesTried < 6 || depth < 2 ||
 
                         // If reduction is applicable do a reduced search with a null window
-                        // TODO: Test removing these brackets
                         Search(alpha + 1, Min((notPV ? 2 : 1) + movesTried / 13 + depth / 9, depth)) > alpha) &&
 
                         // If alpha was above threshold after reduced search, or didn't match reduction conditions,
@@ -305,17 +299,18 @@ public class MyBot : IChessBot
                     // Cutoff
                     if (alpha >= beta)
                     {
-                        // Update history tables
-                        if (!move.IsCapture)
-                        {
-                            // Note:
-                            // This will possibly mess up ordering on promotions due to them having different key values in the array,
-                            // but the history relying on the information of from->to,
-                            // So far I have not found it worth adding promotion ordering, but be aware of that
-                            historyHeuristics[move.RawValue] += depth * depth;
-                            killers[plyFromRoot] = move;
-                        }
                         newTTFlag = 3;
+
+                        // Skip updating history tables if non-quiet
+                        if (move.IsCapture)
+                            break;
+
+                        // Note:
+                        // This will possibly mess up ordering on promotions due to them having different key values in the array,
+                        // but the history relying on the information of from->to,
+                        // So far I have not found it worth adding promotion ordering, but be aware of that
+                        historyHeuristics[move.RawValue] += depth * depth;
+                        killers[plyFromRoot] = move;
                         break;
                     }
                 }
@@ -396,9 +391,21 @@ public class MyBot : IChessBot
                         }
                         */
                     }
-            return (middlegame * gamephase + endgame * (24 - gamephase)) / (board.IsWhiteToMove ? 24 : -24)
+            return 
+                (middlegame * gamephase + endgame * (24 - gamephase)) / (board.IsWhiteToMove ? 24 : -24)
             // Tempo bonus to help with aspiration windows
                 + 16;
+            // Decay our evaluations as we near closer to a 50 move repitition
+            /*
+               Score of V8.9 50 Move Aware vs V8.9: 1395 - 1246 - 2078  [0.516] 4719
+               ...      V8.9 50 Move Aware playing White: 701 - 614 - 1044  [0.518] 2359
+               ...      V8.9 50 Move Aware playing Black: 694 - 632 - 1034  [0.513] 2360
+               ...      White vs Black: 1333 - 1308 - 2078  [0.503] 4719
+               Elo difference: 11.0 +/- 7.4, LOS: 99.8 %, DrawRatio: 44.0 %
+               SPRT: llr 2.96 (100.6%), lbound -2.94, ubound 2.94 - H1 was accepted
+            
+                * (100 - board.FiftyMoveCounter) / 100;
+            */
         }
     }
 }
