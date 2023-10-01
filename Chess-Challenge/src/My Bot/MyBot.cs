@@ -1,6 +1,6 @@
 ﻿// Tyrant's Engine
 // Version 8.9
-// Current token count: 1017 / 1024
+// Current token count: 1024 / 1024
 // Created for Sebastian Lague's Tiny Chess Bots challenge and competition
 //
 // Special thanks to:
@@ -10,7 +10,7 @@
 // 
 
 
-#define DEBUG
+// #define DEBUG
 
 using ChessChallenge.API;
 using System;
@@ -18,8 +18,6 @@ using System.Linq;
 using static System.Math;
 
 // TODO: Test for timeout above move loop
-// TODO: Test 50mr with 200 instead of 100 scaling factor
-// TODO: Add continue statement to aspiration windows to save my last token!
 
 public class MyBot : IChessBot
 {
@@ -97,32 +95,31 @@ public class MyBot : IChessBot
             {
                 alpha -= 999999;
                 beta += 999999;
+                continue;
             }
-            else
-            {
-#if DEBUG
-                string evalWithMate = eval.ToString();
-                if (Abs(eval) > 50000)
-                {
-                    evalWithMate = eval < 0 ? "-" : "";
-                    evalWithMate += $"M{Ceiling((99998 - Abs((double)eval)) / 2)}";
-                }
 
-                Console.WriteLine("Info: depth: {0, 2} || eval: {1, 6} || nodes: {2, 9} || nps: {3, 8} || time: {4, 5}ms || best move: {5}{6}",
-                    depth,
-                    evalWithMate,
-                    nodes,
-                    1000 * nodes / (timer.MillisecondsElapsedThisTurn + 1),
-                    timer.MillisecondsElapsedThisTurn,
-                    rootMove.StartSquare.Name,
-                    rootMove.TargetSquare.Name);
+#if DEBUG
+            string evalWithMate = eval.ToString();
+            if (Abs(eval) > 50000)
+            {
+                evalWithMate = eval < 0 ? "-" : "";
+                evalWithMate += $"M{Ceiling((99998 - Abs((double)eval)) / 2)}";
+            }
+
+            Console.WriteLine("Info: depth: {0, 2} || eval: {1, 6} || nodes: {2, 9} || nps: {3, 8} || time: {4, 5}ms || best move: {5}{6}",
+                depth,
+                evalWithMate,
+                nodes,
+                1000 * nodes / (timer.MillisecondsElapsedThisTurn + 1),
+                timer.MillisecondsElapsedThisTurn,
+                rootMove.StartSquare.Name,
+                rootMove.TargetSquare.Name);
 #endif
 
-                // Set up window for next search
-                alpha = eval - 17;
-                beta = eval + 17;
-                depth++;
-            }
+            // Set up window for next search
+            alpha = eval - 17;
+            beta = eval + 17;
+            depth++;
         }
 
         // This method doubles as our PVS and QSearch in order to save tokens
@@ -279,6 +276,8 @@ public class MyBot : IChessBot
 
                 board.UndoMove(move);
 
+                // TODO: Test timeout here
+
                 if (eval > bestEval)
                 {
                     bestEval = eval;
@@ -396,21 +395,13 @@ public class MyBot : IChessBot
                         }
                         */
                     }
-            return
+            return (
                 (middlegame * gamephase + endgame * (24 - gamephase)) / (board.IsWhiteToMove ? 24 : -24)
             // Tempo bonus to help with aspiration windows
-                + 16;
-            // Decay our evaluations as we near closer to a 50 move repitition
-            /*
-               Score of V8.9 50 Move Aware vs V8.9: 1395 - 1246 - 2078  [0.516] 4719
-               ...      V8.9 50 Move Aware playing White: 701 - 614 - 1044  [0.518] 2359
-               ...      V8.9 50 Move Aware playing Black: 694 - 632 - 1034  [0.513] 2360
-               ...      White vs Black: 1333 - 1308 - 2078  [0.503] 4719
-               Elo difference: 11.0 +/- 7.4, LOS: 99.8 %, DrawRatio: 44.0 %
-               SPRT: llr 2.96 (100.6%), lbound -2.94, ubound 2.94 - H1 was accepted
-
-            * (100 - board.FiftyMoveCounter) / 100;
-                                   */
+                + 16)
+            // Decay our evaluations as we near closer to a 50 move repetition
+            // (worth barely 10 elo, but I have no idea what else to spend my remaining 10 tokens on)
+                * (100 - board.FiftyMoveCounter) / 100;
         }
     }
 }
