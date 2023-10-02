@@ -4,7 +4,7 @@
 // Created for Sebastian Lague's Tiny Chess Bots challenge and competition
 //
 // Special thanks to:
-// Cmndr, Tisajokt, Jw1912, Cj5716, Antares, Toanth, Ciekce, Gedas, Broxholme, A_randomnoob, Waterwall, Atad, Montessori
+// Cmndr, Tisajokt, Jw1912, Cj5716, Antares, Toanth, Ciekce, Gedas, Broxholme, A_randomnoob, Waterwall, Atad, Montessori, WhiteMouse, 
 // and many others who have helped me learn and grow during this challenge
 // 
 // 
@@ -203,8 +203,6 @@ public class MyBot : IChessBot
                 if (depth >= 2 && staticEval >= beta && allowNull)
                 {
                     board.ForceSkipTurn();
-
-                    // TODO: Play with values: Try a max of 4 or 5 instead of 6 along with a different divisor
                     Search(beta, 3 + depth / 4 + Min(6, (staticEval - beta) / 175), false);
                     board.UndoSkipTurn();
 
@@ -275,8 +273,6 @@ public class MyBot : IChessBot
                     Search(beta);
 
                 board.UndoMove(move);
-
-                // TODO: Test timeout here
 
                 if (eval > bestEval)
                 {

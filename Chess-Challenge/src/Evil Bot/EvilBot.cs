@@ -31,10 +31,9 @@ public class EvilBot : IChessBot
 
     // enum Flag
     // {
-    //     0 = Invalid,
-    //     1 = Exact,
-    //     2 = Upperbound,
-    //     3 = Lowerbound
+    //     0  = Lowerbound
+    //     1  = Upperbound,
+    //     >1 = Exact,
     // }
 
     // 0x400000 represents the rough number of entries it would take to fill 256mb
@@ -80,32 +79,31 @@ public class EvilBot : IChessBot
             {
                 alpha -= 999999;
                 beta += 999999;
+                continue;
             }
-            else
-            {
-#if DEBUG
-                string evalWithMate = eval.ToString();
-                if (Abs(eval) > 50000)
-                {
-                    evalWithMate = eval < 0 ? "-" : "";
-                    evalWithMate += $"M{Ceiling((99998 - Abs((double)eval)) / 2)}";
-                }
 
-                Console.WriteLine("Info: depth: {0, 2} || eval: {1, 6} || nodes: {2, 9} || nps: {3, 8} || time: {4, 5}ms || best move: {5}{6}",
-                    depth,
-                    evalWithMate,
-                    nodes,
-                    1000 * nodes / (timer.MillisecondsElapsedThisTurn + 1),
-                    timer.MillisecondsElapsedThisTurn,
-                    rootMove.StartSquare.Name,
-                    rootMove.TargetSquare.Name);
+#if DEBUG
+            string evalWithMate = eval.ToString();
+            if (Abs(eval) > 50000)
+            {
+                evalWithMate = eval < 0 ? "-" : "";
+                evalWithMate += $"M{Ceiling((99998 - Abs((double)eval)) / 2)}";
+            }
+
+            Console.WriteLine("Info: depth: {0, 2} || eval: {1, 6} || nodes: {2, 9} || nps: {3, 8} || time: {4, 5}ms || best move: {5}{6}",
+                depth,
+                evalWithMate,
+                nodes,
+                1000 * nodes / (timer.MillisecondsElapsedThisTurn + 1),
+                timer.MillisecondsElapsedThisTurn,
+                rootMove.StartSquare.Name,
+                rootMove.TargetSquare.Name);
 #endif
 
-                // Set up window for next search
-                alpha = eval - 17;
-                beta = eval + 17;
-                depth++;
-            }
+            // Set up window for next search
+            alpha = eval - 17;
+            beta = eval + 17;
+            depth++;
         }
 
         // This method doubles as our PVS and QSearch in order to save tokens
@@ -130,7 +128,7 @@ public class EvilBot : IChessBot
 
             // Define best eval all the way up here to generate the standing pattern for QSearch
             int bestEval = -9999999,
-                newTTFlag = 2,
+                newTTFlag = 1, // Upperbound
                 movesTried = 0,
                 movesScored = 0,
                 eval;
@@ -159,14 +157,14 @@ public class EvilBot : IChessBot
             // No need for EXACT flag if we just invert some conditions. Thank you Broxholme for this suggestion
             if (entryKey == zobristKey && notPV && entryDepth >= depth | inQSearch && Abs(entryScore) < 50000 &&
                     // Lowerbound
-                    entryFlag != 3 | entryScore >= beta &&
+                    entryFlag != 0 | entryScore >= beta &&
                     // Upperbound
-                    entryFlag != 2 | entryScore <= alpha)
+                    entryFlag != 1 | entryScore <= alpha)
                 return entryScore;
 
             if (inQSearch)
             {
-                // Determine if quiescence search should be continued
+                // Standpat check -> determine if quiescence search should be continued
                 bestEval = Evaluate();
                 if (bestEval >= beta)
                     return bestEval;
@@ -212,9 +210,7 @@ public class EvilBot : IChessBot
             foreach (Move move in moveSpan)
                 MoveScores[movesScored++] = -(
                 // Hash move
-                move == entryMove ? 9_000_000 :
-                // Promotions
-                // move.PromotionPieceType == PieceType.Queen ? 8_000_000 :
+                move == entryMove ? 90_000_000 :
                 // MVVLVA
                 move.IsCapture ? 1_000_000 * (int)move.CapturePieceType - (int)move.MovePieceType :
                 // Killers
@@ -252,7 +248,6 @@ public class EvilBot : IChessBot
                     (movesTried < 6 || depth < 2 ||
 
                         // If reduction is applicable do a reduced search with a null window
-                        // TODO: Test removing these brackets
                         Search(alpha + 1, Min((notPV ? 2 : 1) + movesTried / 13 + depth / 9, depth)) > alpha) &&
 
                         // If alpha was above threshold after reduced search, or didn't match reduction conditions,
@@ -265,6 +260,8 @@ public class EvilBot : IChessBot
 
                 board.UndoMove(move);
 
+                // TODO: Test timeout here
+
                 if (eval > bestEval)
                 {
                     bestEval = eval;
@@ -272,7 +269,10 @@ public class EvilBot : IChessBot
                     {
                         alpha = eval;
                         bestMove = move;
-                        newTTFlag = 1;
+
+                        // Increment, since we can raise alpha multiple times,
+                        // Any flag above 1 in treated as an exact flag
+                        newTTFlag++;
 
                         // Update the root move
                         if (!notRoot)
@@ -282,17 +282,19 @@ public class EvilBot : IChessBot
                     // Cutoff
                     if (alpha >= beta)
                     {
-                        // Update history tables
-                        if (!move.IsCapture)
-                        {
-                            // Note:
-                            // This will possibly mess up ordering on promotions due to them having different key values in the array,
-                            // but the history relying on the information of from->to,
-                            // So far I have not found it worth adding promotion ordering, but be aware of that
-                            historyHeuristics[move.RawValue] += depth * depth;
-                            killers[plyFromRoot] = move;
-                        }
-                        newTTFlag = 3;
+                        // Lowerbound
+                        newTTFlag = 0;
+
+                        // Skip updating history tables if non-quiet
+                        if (move.IsCapture)
+                            break;
+
+                        // Note:
+                        // This will possibly mess up ordering on promotions due to them having different key values in the array,
+                        // but the history relying on the information of from->to,
+                        // So far I have not found it worth adding promotion ordering, but be aware of that
+                        historyHeuristics[move.RawValue] += depth * depth;
+                        killers[plyFromRoot] = move;
                         break;
                     }
                 }
@@ -338,8 +340,12 @@ public class EvilBot : IChessBot
                             endgame += 63;
                         }
 
-                        // Doubled pawns penalty (brought to my attention by Y3737)
+                        // Save file
+                        // Flipping the square is irrelevant since the file will stay the same,
+                        // hence no need to flip it back
                         ulong file = 0x101010101010101UL << (square & 7);
+
+                        // Doubled pawns penalty (brought to my attention by Y3737)
                         if (piece == 0 && (file & mask) > 0)
                         {
                             middlegame -= 22;
@@ -373,9 +379,13 @@ public class EvilBot : IChessBot
                         }
                         */
                     }
-            return (middlegame * gamephase + endgame * (24 - gamephase)) / (board.IsWhiteToMove ? 24 : -24)
+            return (
+                (middlegame * gamephase + endgame * (24 - gamephase)) / (board.IsWhiteToMove ? 24 : -24)
             // Tempo bonus to help with aspiration windows
-                + 16;
+                + 16)
+            // Decay our evaluations as we near closer to a 50 move repetition
+            // (worth barely 10 elo, but I have no idea what else to spend my remaining 10 tokens on)
+                * (100 - board.FiftyMoveCounter) / 100;
         }
     }
 }
