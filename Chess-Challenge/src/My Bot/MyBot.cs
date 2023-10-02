@@ -9,15 +9,10 @@
 // 
 // 
 
-
-// #define DEBUG
-
 using ChessChallenge.API;
 using System;
 using System.Linq;
 using static System.Math;
-
-// TODO: Test for timeout above move loop
 
 public class MyBot : IChessBot
 {
@@ -61,17 +56,8 @@ public class MyBot : IChessBot
 
     Move rootMove;
 
-#if DEBUG
-    long nodes;
-#endif
-
     public Move Think(Board board, Timer timer)
     {
-#if DEBUG
-        Console.WriteLine();
-        nodes = 0;
-#endif
-
         // Reset history tables (thank you, Broxholme for this approach at history)
         var historyHeuristics = new int[65536];
 
@@ -97,24 +83,6 @@ public class MyBot : IChessBot
                 beta += 999999;
                 continue;
             }
-
-#if DEBUG
-            string evalWithMate = eval.ToString();
-            if (Abs(eval) > 50000)
-            {
-                evalWithMate = eval < 0 ? "-" : "";
-                evalWithMate += $"M{Ceiling((99998 - Abs((double)eval)) / 2)}";
-            }
-
-            Console.WriteLine("Info: depth: {0, 2} || eval: {1, 6} || nodes: {2, 9} || nps: {3, 8} || time: {4, 5}ms || best move: {5}{6}",
-                depth,
-                evalWithMate,
-                nodes,
-                1000 * nodes / (timer.MillisecondsElapsedThisTurn + 1),
-                timer.MillisecondsElapsedThisTurn,
-                rootMove.StartSquare.Name,
-                rootMove.TargetSquare.Name);
-#endif
 
             // Set up window for next search
             alpha = eval - 17;
@@ -153,13 +121,6 @@ public class MyBot : IChessBot
             // Evil local method to save tokens for similar calls to PVS (set eval inside search)
             int Search(int newAlpha, int R = 1, bool canNull = true) => eval = -PVS(depth - R, -newAlpha, -alpha, plyFromRoot, canNull);
             //
-            //
-
-            // Internal iterative reductions
-            /*
-            if (!notPV && depth >= 4 && entryMove == default)
-                depth--;
-            */
 
             // Check extensions
             if (inCheck)
@@ -364,32 +325,12 @@ public class MyBot : IChessBot
                             endgame -= 35;
                         }
 
-                        // Open file bonus
-                        /*
-                        if (piece == 3 && BitboardHelper.GetNumberOfSetBits(0x101010101010101UL << (square & 7) & board.AllPiecesBitboard) == 1)
-                        {
-                            middlegame += 25;
-                            endgame += 9;
-                        }
-                        */
-
                         // Semi-open file bonus for rooks
                         if (piece == 3 && (file & board.GetPieceBitboard(PieceType.Pawn, sideToMove > 0)) == 0)
                         {
                             middlegame += 29;
                             endgame += 17;
                         }
-
-                        // Mobility bonus
-                        /*
-                        if (piece >= 2 && piece <= 4)
-                        {
-                            double bonus = BitboardHelper.GetNumberOfSetBits(
-                                BitboardHelper.GetPieceAttacks((PieceType)piece + 1, new Square(square ^ 56 * sideToMove), board, false));
-                            middlegame += (int)(bonus * 5.23745);
-                            endgame += (int)(bonus * 4.25251);
-                        }
-                        */
                     }
             return (
                 (middlegame * gamephase + endgame * (24 - gamephase)) / (board.IsWhiteToMove ? 24 : -24)
