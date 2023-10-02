@@ -1,5 +1,5 @@
 ﻿// Tyrant's Engine
-// Version 8.9
+// Version 9.0
 // Current token count: 1024 / 1024
 // Created for Sebastian Lague's Tiny Chess Bots challenge and competition
 //
