@@ -21,7 +21,8 @@ namespace ChessChallenge.Application
             MyBot,
             EvilBot,
             TunedBot,
-            CellBot
+            CellBot,
+            MiniBot,
         }
 
         // Game state
@@ -115,7 +116,7 @@ namespace ChessChallenge.Application
             NotifyTurnToMove();
         }
 
-        public static API.IChessBot? CreateBot(PlayerType type, int tunerID = 0)
+        public static API.IChessBot? CreateBot(PlayerType type)
         {
             return type switch
             {
@@ -123,6 +124,7 @@ namespace ChessChallenge.Application
                 PlayerType.EvilBot => new EvilBot(),
                 PlayerType.TunedBot => Tuner.NewBot(),
                 PlayerType.CellBot => new CellBot(),
+                PlayerType.MiniBot => new My400TokenBot(),
                 // If you have other bot types, you can add them here as well
                 _ => null
             };
@@ -227,6 +229,7 @@ namespace ChessChallenge.Application
                 PlayerType.EvilBot => new ChessPlayer(new EvilBot(), type, GameDurationMilliseconds),
                 PlayerType.TunedBot => new ChessPlayer(Tuner.NewBot(), type, GameDurationMilliseconds),
                 PlayerType.CellBot => new ChessPlayer(new CellBot(), type, GameDurationMilliseconds),
+                PlayerType.MiniBot => new ChessPlayer(new My400TokenBot(), type, GameDurationMilliseconds),
                 _ => new ChessPlayer(new HumanPlayer(boardUI), type)
             };
         }

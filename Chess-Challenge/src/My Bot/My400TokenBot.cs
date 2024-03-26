@@ -2,7 +2,7 @@
 using System;
 using System.Linq;
 
-public class EvilBot : IChessBot
+public class My400TokenBot : IChessBot
 {
     Move rootMove;
 
@@ -31,7 +31,7 @@ public class EvilBot : IChessBot
         //Queen ranks
         17073413321325017080ul,                       
         //King ranks
-        1447370843669012753ul,
+        1447370843669012753ul,    
     };
 
     Move[] transpositionTable = new Move[0x800000];
@@ -44,16 +44,13 @@ public class EvilBot : IChessBot
             depth = 1;
 
         // Iterative deepening loop
-        for (; ; )
+        // Out of time -> soft bound exceeded
+        for (; timer.MillisecondsElapsedThisTurn < searchMaxTime / 2; )
         {
             int eval = PVS(depth++, -999999, 999999, 0);
-
-            // Out of time -> soft bound exceeded
-            if (timer.MillisecondsElapsedThisTurn > searchMaxTime / 3)
-                return rootMove;
-
             Console.WriteLine($"Depth: {depth - 1,2} | Eval: {eval,5} | Time: {timer.MillisecondsElapsedThisTurn,5}");
         }
+        return rootMove;
 
         // This method doubles as our PVS and QSearch in order to save tokens
         int PVS(int depth, int alpha, int beta, int plyFromRoot)
@@ -118,7 +115,7 @@ public class EvilBot : IChessBot
                 // -> Return checkmate so that this move is ignored
                 // but better than the worst eval so a move is still picked if no moves are looked at
                 // -> Depth check is to disallow timeouts before the bot has finished one round of ID
-                if (depth > 2 && timer.MillisecondsElapsedThisTurn > searchMaxTime)
+                if (timer.MillisecondsElapsedThisTurn > searchMaxTime)
                     return 99999;
 
                 board.MakeMove(move);
