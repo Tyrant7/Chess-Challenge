@@ -3,6 +3,7 @@
     A very stripped down version of my 1024 token engine
     Created for the Chess Coding Challenge community 400 token event, and featuring:
     - Negamax with AB pruning
+    - Iterative deepening
     - Quiescence Search with Standpat check
     - Check extensions
     - Hard and soft bounds for time management
