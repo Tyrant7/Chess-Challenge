@@ -1,4 +1,17 @@
-﻿using ChessChallenge.API;
+﻿/*
+    Tyrant's Mini Engine
+    A very stripped down version of my 1024 token engine
+    Created for the Chess Coding Challenge community 400 token event, and featuring:
+    - Negamax with AB pruning
+    - Quiescence Search with Standpat check
+    - Check extensions
+    - Hard and soft bounds for time management
+    - TT for move ordering only
+    - MVVLVA
+    - Rank-file PeSTO eval with baked material values (tuned)
+*/
+
+using ChessChallenge.API;
 using System;
 using System.Linq;
 
@@ -94,7 +107,9 @@ public class My400TokenBot : IChessBot
                             bestEval -= (int)((packedTables[piece] >> square % 8 * 8 & 0xFFul) +
                                      // And our rank
                                      // Unfortunately the divison here is still necessary, as it forces the rank to truncate
-                                     (packedTables[piece + 6] >> square / 8 * 8 & 0xFFul)) + (piece == 2 && mask != 0 ? 12 : 0))
+                                     (packedTables[piece + 6] >> square / 8 * 8 & 0xFFul)) + 
+                                     // Bishop pair bonus as well, value is low since all of our evaluation values are lower than normal to fit into the byte range
+                                     (piece == 2 && mask != 0 ? 12 : 0))
 
                             // Get our square and flip for side to move
                             square = BitboardHelper.ClearAndGetIndexOfLSB(ref mask) ^ 56 * sideToMove;
