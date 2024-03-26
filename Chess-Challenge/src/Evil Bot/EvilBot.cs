@@ -41,30 +41,32 @@ public class EvilBot : IChessBot
         // 1/13th of our remaining time, split among all of the moves
         int searchMaxTime = timer.MillisecondsRemaining / 13,
             // Progressively increase search depth, starting from 2
-            depth = 1;
+            depth = 2;
 
         // Iterative deepening loop
-        for (; ; )
+        // Out of time -> soft bound exceeded
+        while (timer.MillisecondsElapsedThisTurn < searchMaxTime / 2)
+            Search(depth++, -999999, 999999, 0);
+
+        /*
+            Debug
+            for (; timer.MillisecondsElapsedThisTurn < searchMaxTime / 2; )
+            {
+                int eval = PVS(depth++, -999999, 999999, 0);
+                Console.WriteLine($"Depth: {depth - 1,2} | Eval: {eval,5} | Time: {timer.MillisecondsElapsedThisTurn,5}");
+            }
+        */
+        return rootMove;
+
+        // This method doubles as our Search and QSearch in order to save tokens
+        int Search(int depth, int alpha, int beta, int plyFromRoot)
         {
-            int eval = PVS(depth++, -999999, 999999, 0);
-
-            // Out of time -> soft bound exceeded
-            if (timer.MillisecondsElapsedThisTurn > searchMaxTime / 3)
-                return rootMove;
-
-            Console.WriteLine($"Depth: {depth - 1,2} | Eval: {eval,5} | Time: {timer.MillisecondsElapsedThisTurn,5}");
-        }
-
-        // This method doubles as our PVS and QSearch in order to save tokens
-        int PVS(int depth, int alpha, int beta, int plyFromRoot)
-        {
-            // Declare some reused variables
-            bool inCheck = board.IsInCheck(),
-                notPV = beta - alpha == 1;
-
             // Draw detection
             if (plyFromRoot++ > 0 && board.IsRepeatedPosition())
                 return 0;
+
+            // Declare some reused variables
+            bool inCheck = board.IsInCheck();
 
             // Define best eval all the way up here to generate the standing pattern for QSearch
             int bestEval = -9999999,
@@ -77,9 +79,8 @@ public class EvilBot : IChessBot
             if (inCheck)
                 depth++;
 
-            // Declare QSearch status here to prevent dropping into QSearch while in check
-            bool inQSearch = depth <= 0;
-            if (inQSearch)
+            // QSearch
+            if (depth <= 0)
             {
                 // Our evaluation
                 bestEval = 0;
@@ -110,19 +111,18 @@ public class EvilBot : IChessBot
 
             // Lookup our bestMove in the TT for move ordering
             Move bestMove = transpositionTable[board.ZobristKey & 0x7FFFFF];
-            foreach (Move move in board.GetLegalMoves(inQSearch && !inCheck)
+            foreach (Move move in board.GetLegalMoves(depth <= 0 && !inCheck)
                 // MVVLVA ordering with hash move
-                .OrderByDescending(move => move == bestMove ? 1000 : (int)move.CapturePieceType - (int)move.MovePieceType))
+                .OrderByDescending(move => move == bestMove ? 10_000 : (int)move.CapturePieceType - (int)move.MovePieceType))
             {
                 // Out of time -> hard bound exceeded
                 // -> Return checkmate so that this move is ignored
                 // but better than the worst eval so a move is still picked if no moves are looked at
-                // -> Depth check is to disallow timeouts before the bot has finished one round of ID
-                if (depth > 2 && timer.MillisecondsElapsedThisTurn > searchMaxTime)
+                if (timer.MillisecondsElapsedThisTurn > searchMaxTime)
                     return 99999;
 
                 board.MakeMove(move);
-                eval = -PVS(depth - 1, -beta, -alpha, plyFromRoot);
+                eval = -Search(depth - 1, -beta, -alpha, plyFromRoot);
                 board.UndoMove(move);
 
                 if (eval > bestEval)
