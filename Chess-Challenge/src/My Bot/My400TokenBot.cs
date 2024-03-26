@@ -45,19 +45,24 @@ public class My400TokenBot : IChessBot
 
         // Iterative deepening loop
         // Out of time -> soft bound exceeded
-        for (; timer.MillisecondsElapsedThisTurn < searchMaxTime / 2; )
-        {
-            int eval = PVS(depth++, -999999, 999999, 0);
-            Console.WriteLine($"Depth: {depth - 1,2} | Eval: {eval,5} | Time: {timer.MillisecondsElapsedThisTurn,5}");
-        }
+        for (; timer.MillisecondsElapsedThisTurn < searchMaxTime / 2; PVS(depth++, -999999, 999999, 0))
+            ;
+
+        /*
+            Debug
+            for (; timer.MillisecondsElapsedThisTurn < searchMaxTime / 2; )
+            {
+                int eval = PVS(depth++, -999999, 999999, 0);
+                Console.WriteLine($"Depth: {depth - 1,2} | Eval: {eval,5} | Time: {timer.MillisecondsElapsedThisTurn,5}");
+            }
+        */
         return rootMove;
 
         // This method doubles as our PVS and QSearch in order to save tokens
         int PVS(int depth, int alpha, int beta, int plyFromRoot)
         {
             // Declare some reused variables
-            bool inCheck = board.IsInCheck(),
-                notPV = beta - alpha == 1;
+            bool inCheck = board.IsInCheck();
 
             // Draw detection
             if (plyFromRoot++ > 0 && board.IsRepeatedPosition())
